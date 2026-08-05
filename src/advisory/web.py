@@ -57,6 +57,11 @@ def health() -> dict[str, str]:
 
 @app.get("/", response_class=HTMLResponse)
 def home(request: Request) -> HTMLResponse:
+    return templates.TemplateResponse(request=request, name="welcome.html")
+
+
+@app.get("/workspace", response_class=HTMLResponse)
+def workspace(request: Request) -> HTMLResponse:
     return render(request)
 
 

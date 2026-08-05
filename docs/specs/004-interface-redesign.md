@@ -1,48 +1,59 @@
-# Spec 004 — Advisory workspace interface
+# Spec 004 — Welcome and guided advisory review
 
 Status: Implemented
 
 ## Context
 
-The initial interface proved the end-to-end assessment flow but presented it as an editorial landing page. The product it replaces is a guided Streamlit workflow with visible stages for setup, CV input, job context, team selection, and results. The production replacement needs to preserve that sense of progress while looking like a trustworthy career-analysis workspace rather than a marketing concept.
+The product replaces a Streamlit application whose strongest qualities are its approachable welcome screen, explicit board concept, and sequential workflow. A first production interface collapsed the experience into a dense form and then a generic dashboard. Both reduced clarity and emotional appeal even though they improved implementation quality.
 
-## Design direction
+The replacement must improve the original without erasing its identity.
 
-- Calm, professional application shell with a compact top bar and persistent workflow navigation.
-- Neutral canvas and white working surfaces; deep navy navigation; muted blue as the only primary action accent.
-- No neon, acid, coral, or oversized display typography.
-- Dense enough for serious work while retaining clear spacing and hierarchy.
-- Evidence and privacy language remains visible at the point of use.
-- Results prioritize traceability: score limitation, component breakdown, source evidence, gaps, and structured output.
+## Product principles
+
+- Welcome before asking for work: explain the board, value, safeguards, and flow before showing inputs.
+- One decision at a time: CV first, target role second, findings last.
+- Preserve the board metaphor: recruiting, hiring, and technical perspectives remain visible.
+- Evidence over decoration: visual hierarchy supports the review rather than competing with it.
+- Warm and credible: neutral paper surfaces, charcoal typography, and one muted plum accent.
+- No neon palette, dark dashboard rail, oversized SaaS chrome, or inactive navigation.
 
 ## Information architecture
 
-1. Candidate profile — CV evidence.
-2. Target role — job requirements.
-3. Advisory review — deterministic comparison.
-4. Recommendations — supported evidence and truthful gaps.
+### Welcome
 
-The current vertical slice collects steps 1 and 2 together for speed. The progress rail establishes the structure for later file upload, provider configuration, specialist selection, and richer results without presenting inactive controls as implemented features.
+1. Product promise and primary action.
+2. Advisory-board preview.
+3. Evidence, truthfulness, and privacy safeguards.
+4. Three concrete benefits.
+5. Four-stage review explanation.
+
+### Guided workspace
+
+1. Add CV content.
+2. Add the target role.
+3. Run the deterministic board review.
+4. Inspect evidence, gaps, component scores, and structured output.
 
 ## Interaction requirements
 
-- A synthetic-data path is available without an API key.
-- Both text inputs and the primary review action are visible in the first workspace view on desktop.
-- Input state remains present after assessment.
-- Results appear in the same document and retain the disclaimer beside the score.
-- No recommendation may imply experience absent from the CV.
-- All controls have semantic labels and a visible keyboard focus treatment.
+- `GET /` renders the welcome experience.
+- `GET /workspace` starts the guided review at the CV step.
+- Continuing without CV text uses native constraint feedback and does not advance.
+- Input state remains in the document after assessment.
+- A synthetic sample is available from both welcome and workspace.
+- Score limitations remain beside the score.
+- Every recommendation is derived from a detected gap.
 
 ## Responsive behavior
 
-- At tablet widths, the vertical workflow rail becomes a compact horizontal progress indicator.
-- At mobile widths, input and result columns stack and all actions become full width.
-- No viewport at or above 390 CSS pixels may have horizontal page overflow.
+- The welcome hero stacks below 900 CSS pixels.
+- The progress indicator remains visible on mobile without its secondary labels.
+- Input and finding panels use a single column on mobile.
+- No page may overflow horizontally at 390 CSS pixels.
 
-## Visual regression contract
+## Regression contract
 
-- The stylesheet must use a same-origin path (`/static/app.css`).
-- The body background resolves to `rgb(246, 247, 251)`.
-- The page must not fall back to Times New Roman.
-- Playwright covers the sample review, custom review, structured result, and mobile overflow.
-
+- Styles and behavior load from same-origin `/static/app.css` and `/static/app.js`.
+- The welcome background resolves to `rgb(251, 250, 248)`.
+- Browser tests cover welcome, synthetic review, progressive custom review, structured results, and mobile overflow on welcome and workspace.
+- Browser console warnings and errors are empty in the final production regression.
