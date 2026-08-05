@@ -1,0 +1,6 @@
+[
+  {"id":"strong-platform","cv":"EXPERIENCE\nBuilt Python FastAPI services on Google Cloud with Docker and SQL.\nSKILLS\nPython FastAPI Google Cloud Docker SQL observability\nEDUCATION\nComputer Science","job":"Python FastAPI Google Cloud Docker SQL observability","expected_band":"strong","required_gaps":[]},
+  {"id":"partial-data","cv":"EXPERIENCE\nBuilt Python and SQL analytics.\nSKILLS\nPython SQL\nEDUCATION\nStatistics","job":"Python SQL Spark Kubernetes Terraform leadership","expected_band":"partial","required_gaps":["kubernetes","terraform"]},
+  {"id":"weak-design","cv":"EXPERIENCE\nBackend Java developer.\nSKILLS\nJava SQL\nEDUCATION\nComputer Science","job":"Figma user research prototyping typography accessibility","expected_band":"weak","required_gaps":["figma","prototyping"]}
+]
+

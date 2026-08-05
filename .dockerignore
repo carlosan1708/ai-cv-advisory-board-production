@@ -1,0 +1,10 @@
+.git
+.env
+.venv
+data
+tests
+tests_e2e
+playwright-report
+test-results
+__pycache__
+

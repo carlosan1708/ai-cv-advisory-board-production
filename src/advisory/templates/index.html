@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AI CV Advisory Board</title>
+  <link rel="stylesheet" href="{{ url_for('static', path='/app.css') }}">
+</head>
+<body>
+  <header class="hero">
+    <nav><span class="brand">ADVISORY / LAB</span><span class="version">BASELINE 1.0</span></nav>
+    <div class="hero-grid">
+      <div>
+        <p class="eyebrow">Evidence before eloquence</p>
+        <h1>Know what your CV proves.</h1>
+        <p class="lede">An explainable CV–job assessment that identifies evidence, gaps, and safe next steps—without inventing experience.</p>
+      </div>
+      <form method="post" action="/demo" class="demo-card">
+        <p>Explore the complete flow with synthetic data.</p>
+        <button type="submit" data-testid="demo-button">Run synthetic demo <span>→</span></button>
+      </form>
+    </div>
+  </header>
+
+  <main>
+    <section class="workspace" aria-labelledby="workspace-title">
+      <div class="section-heading">
+        <p class="eyebrow">01 / INPUT</p>
+        <h2 id="workspace-title">Compare your evidence</h2>
+      </div>
+      {% if error %}<div class="alert" role="alert">{{ error }}</div>{% endif %}
+      <form method="post" action="/analyze" class="analysis-form">
+        <label>CV text<textarea name="cv_text" data-testid="cv-input" required maxlength="30000" placeholder="Paste your CV text">{{ cv_text }}</textarea></label>
+        <label>Job description<textarea name="job_text" data-testid="job-input" required maxlength="30000" placeholder="Paste the target job description">{{ job_text }}</textarea></label>
+        <button type="submit" class="primary" data-testid="analyze-button">Assess evidence</button>
+      </form>
+    </section>
+
+    {% if assessment %}
+    <section class="results" aria-labelledby="results-title" data-testid="results">
+      <div class="section-heading">
+        <p class="eyebrow">02 / ASSESSMENT</p>
+        <h2 id="results-title">Your evidence map</h2>
+      </div>
+      <div class="score-panel">
+        <div class="score" aria-label="Match score {{ assessment.score }} out of 100"><strong data-testid="score">{{ assessment.score }}</strong><span>/100</span></div>
+        <div><span class="band">{{ assessment.band }} match</span><p data-testid="score-disclaimer">{{ assessment.warnings[0] }}</p><small>Run {{ run_id[:8] }} · {{ assessment.scoring_version }}</small></div>
+      </div>
+      <div class="components">
+        <article><span>{{ assessment.components.requirement_coverage }}/70</span><p>Requirement coverage</p></article>
+        <article><span>{{ assessment.components.document_structure }}/20</span><p>Document structure</p></article>
+        <article><span>{{ assessment.components.evidence_density }}/10</span><p>Evidence density</p></article>
+      </div>
+      <div class="result-grid">
+        <article>
+          <h3>Evidence found</h3>
+          {% for requirement in assessment.requirements if requirement.matched %}
+          <div class="requirement matched"><strong>{{ requirement.term }}</strong><p>{{ requirement.evidence[0] }}</p></div>
+          {% else %}<p>No direct evidence detected.</p>{% endfor %}
+        </article>
+        <article data-testid="evidence-gaps">
+          <h3>Evidence gaps</h3>
+          {% for recommendation in assessment.recommendations %}<div class="requirement gap"><p>{{ recommendation }}</p></div>{% else %}<p>No high-priority gaps detected.</p>{% endfor %}
+        </article>
+      </div>
+      <details><summary>Structured result</summary><pre data-testid="json-result">{{ assessment_json }}</pre></details>
+    </section>
+    {% endif %}
+  </main>
+  <footer><span>Privacy by default: submitted text is not persisted.</span><span>Schema 1.0</span></footer>
+</body>
+</html>
