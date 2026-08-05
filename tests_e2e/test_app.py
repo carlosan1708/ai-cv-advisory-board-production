@@ -8,6 +8,9 @@ BASE_URL = os.getenv("E2E_BASE_URL", "http://127.0.0.1:8000")
 def test_home_and_synthetic_demo(page: Page) -> None:
     page.goto(BASE_URL)
     expect(page.get_by_role("heading", name="Know what your CV proves.")).to_be_visible()
+    assert page.locator('link[rel="stylesheet"]').get_attribute("href") == "/static/app.css"
+    assert page.evaluate("getComputedStyle(document.body).fontFamily") != '"Times New Roman"'
+    assert page.evaluate("getComputedStyle(document.body).backgroundColor") == "rgb(244, 241, 232)"
     page.get_by_test_id("demo-button").click()
     expect(page.get_by_test_id("results")).to_be_visible()
     expect(page.get_by_test_id("score")).not_to_have_text("0")

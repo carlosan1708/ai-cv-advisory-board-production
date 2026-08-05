@@ -13,6 +13,14 @@ def test_home_explains_product() -> None:
     response = client.get("/")
     assert response.status_code == 200
     assert "Know what your CV proves" in response.text
+    assert 'href="/static/app.css"' in response.text
+
+
+def test_stylesheet_is_served_as_css() -> None:
+    response = client.get("/static/app.css")
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/css")
+    assert "--paper:#f4f1e8" in response.text
 
 
 def test_demo_renders_assessment() -> None:
@@ -33,4 +41,3 @@ def test_api_contract() -> None:
 def test_api_rejects_blank_input() -> None:
     response = client.post("/api/assessments", data={"cv_text": " ", "job_text": "Python"})
     assert response.status_code == 422
-
