@@ -59,6 +59,16 @@ def test_cv_library_reviews_and_saves_a_new_version(page: Page, tmp_path: Path) 
     )
     page.get_by_role("button", name="Save new version").click()
     expect(page.get_by_role("heading", name=f"{label} revised")).to_be_visible()
+    page.goto(f"{BASE_URL}/dashboard")
+    page.get_by_role("button", name="Start an AI expert review").click()
+    panel = page.locator("[data-expert-dialog]")
+    expect(panel.locator("[data-expert-application-fields]")).to_be_hidden()
+    panel.get_by_label("CV version").select_option(label=f"{label} revised")
+    panel.get_by_role("button", name="Ask the AI panel").click()
+    expect(panel.locator("[data-expert-result]")).to_be_visible()
+    expect(panel.get_by_role("heading", name="Recruiter")).to_be_visible()
+    expect(panel.get_by_role("heading", name="Hiring Manager")).to_be_visible()
+    expect(panel.get_by_role("heading", name="Technical Reviewer")).to_be_visible()
 
 
 def test_tracker_add_move_filter_and_funnel_update(page: Page) -> None:
@@ -95,7 +105,9 @@ def test_tracker_uploads_and_attaches_exact_cv_version(page: Page, tmp_path: Pat
     page.get_by_role("button", name="Add application", exact=True).first.click()
     page.get_by_label("Company").fill("Northstar")
     page.get_by_label("Role").fill(f"ML Platform Lead {uuid4().hex[:6]}")
-    page.get_by_label("CV version").select_option(label=version_label)
+    page.locator("[data-application-dialog]").get_by_label("CV version").select_option(
+        label=version_label
+    )
     page.get_by_role("button", name="Add application", exact=True).last.click()
     expect(page.get_by_text(f"CV · {version_label}")).to_be_visible()
 

@@ -7,6 +7,7 @@ from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from pydantic import BaseModel
 from starlette.concurrency import run_in_threadpool
 
 from advisory.access import (
@@ -73,6 +74,10 @@ def owner_id(request: Request) -> str:
 
 def identity(request: Request) -> UserIdentity:
     return identity_verifier.verify(request)
+
+
+class SessionCredential(BaseModel):
+    credential: str
 
 
 def service() -> AssessmentService:
@@ -243,6 +248,36 @@ def session(request: Request) -> dict[str, object]:
         "access": record.status,
         "role": record.role if record.status == "approved" else "none",
     }
+
+
+@app.post("/api/session/login")
+def session_login(payload: SessionCredential) -> JSONResponse:
+    user = identity_verifier.verify_token(payload.credential)
+    record = access_control.status(user)
+    response = JSONResponse(
+        {
+            "email": user.email,
+            "access": record.status,
+            "role": record.role if record.status == "approved" else "none",
+        }
+    )
+    response.set_cookie(
+        "advisory_session",
+        payload.credential,
+        max_age=3_600,
+        httponly=True,
+        secure=settings.environment == "production",
+        samesite="lax",
+        path="/",
+    )
+    return response
+
+
+@app.post("/api/session/logout", status_code=204)
+def session_logout() -> Response:
+    response = Response(status_code=204)
+    response.delete_cookie("advisory_session", path="/")
+    return response
 
 
 @app.post("/api/access-request", status_code=201)

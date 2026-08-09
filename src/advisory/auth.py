@@ -23,11 +23,17 @@ class IdentityVerifier:
                 request.headers.get("x-advisory-email", "carlosan.1708@gmail.com"),
             )
         authorization = request.headers.get("authorization", "")
-        if not authorization.startswith("Bearer "):
+        token = authorization.removeprefix("Bearer ").strip() if authorization.startswith("Bearer ") else ""
+        token = token or request.cookies.get("advisory_session", "")
+        if not token:
             raise HTTPException(status_code=401, detail="Sign in with Google to continue")
+        return self.verify_token(token)
+
+    def verify_token(self, token: str) -> UserIdentity:
+        if self.mode == "development":
+            return UserIdentity("preview-user", "carlosan.1708@gmail.com")
         if not self.google_client_id:
             raise HTTPException(status_code=503, detail="Google sign-in is not configured")
-        token = authorization.removeprefix("Bearer ").strip()
         try:
             from google.auth.transport.requests import Request as GoogleRequest
             from google.oauth2 import id_token

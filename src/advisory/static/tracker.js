@@ -8,6 +8,7 @@
   const appDialog = document.querySelector("[data-application-dialog]");
   const cvDialog = document.querySelector("[data-cv-dialog]");
   const applicationReviewDialog = document.querySelector("[data-application-review-dialog]");
+  const expertDialog = document.querySelector("[data-expert-dialog]");
 
   async function api(url, options = {}) {
     options.headers = { ...(options.headers || {}), ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}) };
@@ -133,8 +134,30 @@
     });
   }
 
+  function populateExpertPanel() {
+    const cvSelect = expertDialog.querySelector("[data-expert-cv]");
+    const applicationSelect = expertDialog.querySelector("[data-expert-application]");
+    cvSelect.replaceChildren(new Option("Choose a CV", ""));
+    applicationSelect.replaceChildren(new Option("Choose an application", ""));
+    state.cvs.forEach((version) => cvSelect.add(new Option(version.label, version.id)));
+    state.applications.forEach((application) => applicationSelect.add(new Option(`${application.role} · ${application.company}`, application.id)));
+  }
+
+  function renderExpertResult(review, scope) {
+    const standalone = scope === "standalone";
+    expertDialog.querySelector("[data-expert-score]").textContent = standalone ? review.quality_score : review.fit_score;
+    expertDialog.querySelector("[data-expert-summary]").textContent = review.summary;
+    const groups = standalone ? [review.strengths, review.improvement_areas, review.next_actions] : [review.supported_strengths, review.evidence_gaps, review.next_actions];
+    ["recruiter", "manager", "technical"].forEach((name, index) => {
+      const list = expertDialog.querySelector(`[data-expert-${name}]`); list.replaceChildren();
+      groups[index].forEach((item) => { const li = document.createElement("li"); li.textContent = item; list.append(li); });
+    });
+    expertDialog.querySelector("[data-expert-result]").hidden = false;
+  }
+
   document.querySelectorAll("[data-open-application]").forEach((button) => button.addEventListener("click", () => appDialog.showModal()));
   document.querySelectorAll("[data-open-cv]").forEach((button) => button.addEventListener("click", () => cvDialog.showModal()));
+  document.querySelectorAll("[data-open-expert-panel]").forEach((button) => button.addEventListener("click", () => { populateExpertPanel(); expertDialog.querySelector("[data-expert-result]").hidden = true; expertDialog.querySelector("[data-expert-error]").textContent = ""; expertDialog.showModal(); }));
   document.querySelectorAll('.tracker-dialog button[value="cancel"]').forEach((button) => button.addEventListener("click", (event) => {
     event.preventDefault(); button.closest("dialog").close();
   }));
@@ -163,48 +186,62 @@
       applicationReviewDialog.close(); render();
     } catch (exc) { error.textContent = exc.message; }
   });
+  document.querySelectorAll('input[name="scope"]').forEach((radio) => radio.addEventListener("change", (event) => { expertDialog.querySelector("[data-expert-application-fields]").hidden = event.target.value !== "application"; expertDialog.querySelector("[data-expert-result]").hidden = true; }));
+  document.querySelector("[data-expert-form]").addEventListener("submit", async (event) => {
+    if (event.submitter?.value === "cancel") return;
+    event.preventDefault();
+    const form = event.currentTarget; const data = new FormData(form); const scope = data.get("scope"); const cvId = data.get("cv_version_id");
+    const error = expertDialog.querySelector("[data-expert-error]"); const button = expertDialog.querySelector("[data-run-expert]"); error.textContent = ""; button.disabled = true; button.textContent = "Consulting the panel…";
+    try {
+      if (scope === "standalone") {
+        const result = await api(`/api/cv-versions/${cvId}/ai-review`, { method: "POST" }); renderExpertResult(result.review, scope);
+      } else {
+        const applicationId = data.get("application_id"); if (!applicationId) throw new Error("Choose an application to compare");
+        const application = state.applications.find((item) => item.id === applicationId);
+        if (application.cv_version_id !== cvId) { Object.assign(application, await api(`/api/applications/${applicationId}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ cv_version_id: cvId }) })); }
+        const result = await api(`/api/applications/${applicationId}/ai-review`, { method: "POST", body: data }); application.fit_score = result.review.fit_score; application.ai_summary = result.review.summary; renderExpertResult(result.review, scope); render();
+      }
+    } catch (exc) { error.textContent = exc.message; }
+    finally { button.disabled = false; button.textContent = "Ask the AI panel"; }
+  });
   document.querySelectorAll("[data-filter]").forEach((button) => button.addEventListener("click", () => { state.filter = button.dataset.filter; document.querySelector("[data-mobile-filter]").value = state.filter; render(); }));
   document.querySelector("[data-clear-filter]").addEventListener("click", () => { state.filter = "all"; render(); });
   document.querySelector("[data-mobile-filter]").addEventListener("change", (event) => { state.filter = event.target.value; render(); });
 
   function start() { Promise.all([api("/api/applications"), api("/api/cv-versions")]).then(([applications, cvs]) => {
     state.applications = applications; state.cvs = cvs;
-    renderCvLibrary(); render();
+    renderCvLibrary(); populateExpertPanel(); render();
   }).catch((error) => { empty.querySelector("p").textContent = error.message; }); }
 
   const authGate = document.querySelector("[data-auth-gate]");
   if (!authGate) start();
   else window.addEventListener("load", () => {
     const clientId = authGate.dataset.clientId;
-    if (!clientId || !window.google?.accounts?.id) {
-      authGate.querySelector("[data-auth-error]").textContent = "Google sign-in could not be loaded.";
-      return;
+    const errorNode = authGate.querySelector("[data-auth-error]");
+    async function enter(session) {
+      if (session.access === "approved") {
+        authGate.hidden = true;
+        document.querySelector("[data-admin-link]").hidden = session.role !== "admin";
+        start(); return;
+      }
+      const stateNode = authGate.querySelector("[data-access-state]");
+      stateNode.hidden = false;
+      stateNode.querySelector("[data-access-title]").textContent = session.access === "rejected" ? "Access was not approved" : "Approval is required";
+      stateNode.querySelector("[data-access-copy]").textContent = session.access === "rejected" ? "Contact the administrator if you believe this is a mistake." : "Send a request to the administrator. Your private workspace stays locked until approval.";
+      const requestButton = stateNode.querySelector("[data-request-access]");
+      requestButton.hidden = session.access === "rejected";
+      requestButton.onclick = async () => { requestButton.disabled = true; try { await api("/api/access-request", { method: "POST" }); requestButton.textContent = "Request sent"; } catch (error) { requestButton.disabled = false; errorNode.textContent = error.message; } };
     }
-    google.accounts.id.initialize({ client_id: clientId, callback: async (response) => {
-      authToken = response.credential;
-      const errorNode = authGate.querySelector("[data-auth-error]");
-      errorNode.textContent = "";
-      try {
-        const session = await api("/api/session");
-        if (session.access === "approved") {
-          authGate.hidden = true;
-          document.querySelector("[data-admin-link]").hidden = session.role !== "admin";
-          start();
-          return;
-        }
-        const stateNode = authGate.querySelector("[data-access-state]");
-        stateNode.hidden = false;
-        stateNode.querySelector("[data-access-title]").textContent = session.access === "rejected" ? "Access was not approved" : "Approval is required";
-        stateNode.querySelector("[data-access-copy]").textContent = session.access === "rejected" ? "Contact the administrator if you believe this is a mistake." : "Send a request to the administrator. Your private workspace stays locked until approval.";
-        const requestButton = stateNode.querySelector("[data-request-access]");
-        requestButton.hidden = session.access === "rejected";
-        requestButton.onclick = async () => {
-          requestButton.disabled = true;
-          try { await api("/api/access-request", { method: "POST" }); requestButton.textContent = "Request sent"; }
-          catch (error) { requestButton.disabled = false; errorNode.textContent = error.message; }
-        };
-      } catch (error) { errorNode.textContent = error.message; }
-    }});
-    google.accounts.id.renderButton(authGate.querySelector("[data-google-signin]"), { theme: "outline", size: "large", shape: "rectangular" });
+    api("/api/session").then(enter).catch(() => {
+      if (!clientId || !window.google?.accounts?.id) { errorNode.textContent = "Google sign-in could not be loaded."; return; }
+      google.accounts.id.initialize({ client_id: clientId, callback: async (response) => {
+        authToken = response.credential; errorNode.textContent = "";
+        try {
+          const session = await api("/api/session/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ credential: response.credential }) });
+          await enter(session);
+        } catch (error) { errorNode.textContent = error.message; }
+      }});
+      google.accounts.id.renderButton(authGate.querySelector("[data-google-signin]"), { theme: "outline", size: "large", shape: "rectangular" });
+    });
   });
 })();

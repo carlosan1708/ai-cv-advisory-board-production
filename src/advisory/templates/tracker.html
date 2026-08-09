@@ -6,7 +6,7 @@
   <title>Application pipeline · AI CV Advisory Board</title>
   <meta name="description" content="Track every application, next action, and the exact CV version you sent.">
   <link rel="stylesheet" href="/static/app.css?v=7">
-  <link rel="stylesheet" href="/static/tracker.css?v=3">
+  <link rel="stylesheet" href="/static/tracker.css?v=4">
   {% if auth_mode == "google" %}<script src="https://accounts.google.com/gsi/client" async defer></script>{% endif %}
 </head>
 <body class="tracker-page">
@@ -31,7 +31,6 @@
     <nav aria-label="Primary navigation">
       <a class="active" href="/dashboard">Dashboard</a>
       <a href="/cvs">CV Library</a>
-      <a href="/workspace">Free Review</a>
       <a href="/admin" data-admin-link hidden>Access</a>
     </nav>
     <button class="button button-primary button-small" type="button" data-open-application>+ Add application</button>
@@ -49,6 +48,11 @@
         <strong>No in-app cap</strong>
         <small>Access controlled by the administrator</small>
       </div>
+    </section>
+
+    <section class="expert-panel" id="ai-panel" aria-labelledby="expert-panel-title">
+      <div class="expert-panel-copy"><span class="overline">AI expert panel</span><h2 id="expert-panel-title">Get a second opinion on any CV.</h2><p>Choose a saved CV and review it on its own, or compare it with one of your applications. One guided review brings together three practical perspectives.</p><button class="button button-primary" type="button" data-open-expert-panel>Start an AI expert review</button></div>
+      <div class="expert-lenses" aria-label="AI review perspectives"><article><span>TR</span><div><strong>Recruiter</strong><small>Clarity and positioning</small></div></article><article><span>HM</span><div><strong>Hiring Manager</strong><small>Impact and seniority</small></div></article><article><span>TE</span><div><strong>Technical Reviewer</strong><small>Evidence and next steps</small></div></article></div>
     </section>
 
     <section class="pipeline-summary" aria-labelledby="funnel-title">
@@ -93,7 +97,7 @@
       </div>
     </section>
   </main>
-  <nav class="mobile-workspace-nav tracker-mobile-nav" aria-label="Mobile workspace navigation"><a class="active" href="/dashboard">Dashboard</a><a href="/cvs">CVs</a><a href="/workspace">Review</a></nav>
+  <nav class="mobile-workspace-nav tracker-mobile-nav" aria-label="Mobile workspace navigation"><a class="active" href="/dashboard">Dashboard</a><a href="/cvs">CVs</a><a href="#ai-panel">AI Panel</a></nav>
 
   <dialog class="tracker-dialog" data-application-dialog>
     <form method="dialog" data-application-form>
@@ -145,13 +149,26 @@
 
   <dialog class="tracker-dialog compact-dialog" data-application-review-dialog>
     <form method="dialog" data-application-review-form>
-      <div class="dialog-heading"><div><span class="overline">Application evidence review</span><h2 data-application-review-title>Review attached CV</h2></div><button class="icon-button" value="cancel" aria-label="Close">&times;</button></div>
+      <div class="dialog-heading"><div><span class="overline">CV-to-job review</span><h2 data-application-review-title>Review attached CV</h2></div><button class="icon-button" value="cancel" aria-label="Close">&times;</button></div>
       <p class="dialog-lede">We will compare the attached library version with this application. If the public job link is unavailable, paste the description below.</p>
       <div class="review-context"><strong data-application-review-cv></strong><span data-application-review-job></span></div>
       <input name="application_id" type="hidden">
       <label>Job description <span class="optional-label">Optional when a public job link is saved</span><textarea name="job_text" rows="8" placeholder="Paste the role responsibilities and requirements…"></textarea></label>
       <p class="form-error" data-application-review-error></p>
       <div class="dialog-actions"><button class="button button-secondary" value="cancel">Cancel</button><button class="button button-primary" type="submit" value="default">Review attached CV</button></div>
+    </form>
+  </dialog>
+
+  <dialog class="tracker-dialog expert-review-dialog" data-expert-dialog>
+    <form method="dialog" data-expert-form>
+      <div class="dialog-heading"><div><span class="overline">AI expert panel</span><h2>What would you like reviewed?</h2></div><button class="icon-button" value="cancel" aria-label="Close">&times;</button></div>
+      <p class="dialog-lede">Start with a saved CV. You can review the document itself or compare it with a tracked application.</p>
+      <label>CV version <select name="cv_version_id" data-expert-cv required><option value="">Choose a CV</option></select></label>
+      <fieldset class="review-scope"><legend>Review type</legend><label><input type="radio" name="scope" value="standalone" checked><span><strong>Review this CV</strong><small>Clarity, impact, structure, and seniority</small></span></label><label><input type="radio" name="scope" value="application"><span><strong>Compare with an application</strong><small>Fit, supported strengths, and missing evidence</small></span></label></fieldset>
+      <div class="application-review-fields" data-expert-application-fields hidden><label>Application <select name="application_id" data-expert-application><option value="">Choose an application</option></select></label><label>Job description <span class="optional-label">Optional when the application has a public link</span><textarea name="job_text" rows="6" placeholder="Paste the description when no public job link is available…"></textarea></label></div>
+      <p class="form-error" data-expert-error></p>
+      <div class="expert-result" data-expert-result hidden><div class="expert-result-score"><strong data-expert-score></strong><span>/100</span></div><div><h3 data-expert-summary></h3><div class="expert-result-grid"><section><span>TR</span><h4>Recruiter</h4><ul data-expert-recruiter></ul></section><section><span>HM</span><h4>Hiring Manager</h4><ul data-expert-manager></ul></section><section><span>TE</span><h4>Technical Reviewer</h4><ul data-expert-technical></ul></section></div></div></div>
+      <div class="dialog-actions"><button class="button button-secondary" value="cancel">Close</button><button class="button button-primary" type="submit" value="default" data-run-expert>Ask the AI panel</button></div>
     </form>
   </dialog>
 
@@ -167,6 +184,6 @@
       <label class="status-control">Move to<select></select></label>
     </article>
   </template>
-  <script src="/static/tracker.js?v=4" defer></script>
+  <script src="/static/tracker.js?v=5" defer></script>
 </body>
 </html>

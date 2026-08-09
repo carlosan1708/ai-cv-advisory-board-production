@@ -146,6 +146,16 @@ def test_admin_page_and_development_session() -> None:
     assert session == {"email": "carlosan.1708@gmail.com", "access": "approved", "role": "admin"}
 
 
+def test_login_creates_http_only_navigation_session_and_logout_clears_it() -> None:
+    login = client.post("/api/session/login", json={"credential": "development-token"})
+    assert login.status_code == 200
+    assert "advisory_session=" in login.headers["set-cookie"]
+    assert "HttpOnly" in login.headers["set-cookie"]
+    logout = client.post("/api/session/logout")
+    assert logout.status_code == 204
+    assert "advisory_session=" in logout.headers["set-cookie"]
+
+
 def test_non_admin_cannot_list_access_records() -> None:
     response = client.get(
         "/api/admin/access",
@@ -196,7 +206,7 @@ def test_workspace_starts_three_stage_review() -> None:
     assert "Paste CV text instead" in response.text
     assert "CV" in response.text
     assert "Job" in response.text
-    assert "Findings" in response.text
+    assert "Report" in response.text
     assert 'src="/static/app.js?v=6"' in response.text
     assert 'enctype="multipart/form-data"' in response.text
 

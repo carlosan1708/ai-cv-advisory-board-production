@@ -41,6 +41,10 @@ def test_google_identity_uses_stable_subject_not_email(monkeypatch: pytest.Monke
     )
     assert identity.subject == "google-subject-123"
     assert identity.email == "person@example.com"
+    cookie_identity = IdentityVerifier("google", "client-id").verify(
+        request({"cookie": "advisory_session=signed-token"})
+    )
+    assert cookie_identity.subject == "google-subject-123"
 
 
 def test_google_identity_rejects_invalid_claims(monkeypatch: pytest.MonkeyPatch) -> None:
