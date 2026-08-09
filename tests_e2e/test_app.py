@@ -28,7 +28,7 @@ def test_home_presents_free_and_private_modes(page: Page) -> None:
     expect(page.get_by_role("heading", name="Check one CV against one job.")).to_be_visible()
     expect(page.get_by_role("heading", name="Run your full application pipeline.")).to_be_visible()
     expect(page.get_by_text("Shared $5 monthly AI pool", exact=False)).to_be_visible()
-    expect(page.get_by_text("no in-app AI usage cap", exact=False)).to_be_visible()
+    expect(page.get_by_text("$10 monthly AI allowance", exact=False)).to_be_visible()
     assert page.locator('link[rel="stylesheet"]').get_attribute("href") == "/static/app.css?v=8"
     assert page.evaluate("getComputedStyle(document.body).backgroundColor") == "rgb(244, 243, 239)"
     page.get_by_test_id("member-mode-button").click()

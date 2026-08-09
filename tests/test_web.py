@@ -20,6 +20,7 @@ def test_home_explains_product_and_board() -> None:
     assert "Free AI review" in response.text
     assert "Private workspace" in response.text
     assert "Shared $5 monthly AI pool" in response.text
+    assert "$10 monthly AI allowance" in response.text
     assert 'href="/static/app.css?v=8"' in response.text
 
 

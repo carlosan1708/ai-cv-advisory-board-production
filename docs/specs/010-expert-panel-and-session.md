@@ -26,7 +26,7 @@ The private workspace must feel like one coherent product. Moving from the dashb
 ## Access and cost policy
 
 - Public, no-login AI usage consumes the shared monthly USD 5 pool and stops before the configured hard cap.
-- Administrator-approved members have no in-app AI usage cap.
+- Every administrator-approved member has a USD 10 monthly AI allowance.
 - All AI calls retain model, token, latency, status, and estimated-cost telemetry without logging CV or job-description contents.
 
 ## Acceptance criteria
