@@ -9,9 +9,10 @@
 - Health contract: `GET /api/health` returns `{"status":"ok"}`
 - Firestore: owner-scoped applications, CV metadata/extracted text, and monthly AI ledgers
 - Cloud Storage: private immutable CV bytes in `users/{subject}/cv-versions/...`
-- Vertex AI model: `gemini-3.5-flash-lite`, global endpoint, minimal thinking
+- Vertex AI model: `gemini-2.5-flash`, global endpoint, thinking disabled
 - Identity: Google ID token; stable `sub` claim is the owner key
-- Per-user AI limit: 5,000,000 micro-USD per calendar month unless explicitly configured otherwise
+- AI ceilings: $5/month shared anonymous, $10/month per approved user, and $50/month project-wide
+- Burst guards: 2 anonymous AI attempts/minute/client and 10 approved attempts/minute/user
 
 Production environment variables:
 
@@ -37,6 +38,9 @@ The `advisory` logger emits one-line JSON events:
 | `cv_version.created` | opaque user/version IDs, byte count | Immutable CV creation |
 | `gemini.request.completed` | opaque user ID, model, tokens, micro-USD, duration | AI cost and latency |
 | `gemini.request.failed` | opaque user ID, model | Provider failure rate |
+| `security.access_denied` | route, method, 401/403 status | Authentication/authorization abuse |
+| `security.cross_site_blocked` | route, method, fetch metadata | Cross-site mutation attempts |
+| `security.ai_burst_blocked` | access tier | AI burst guard activations |
 
 The logging safety filter removes document text, filenames, credentials, prompts, and full URLs even when
 those fields are passed accidentally.

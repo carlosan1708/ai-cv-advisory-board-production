@@ -79,7 +79,7 @@ JOB DESCRIPTION:
                 response_schema=EvidenceReview,
                 max_output_tokens=1_024,
                 temperature=0.1,
-                thinking_config=types.ThinkingConfig(thinking_level=types.ThinkingLevel.MINIMAL),
+                thinking_config=types.ThinkingConfig(thinking_budget=0),
             ),
         )
         review = response.parsed
@@ -147,7 +147,7 @@ CV:
                 response_schema=CvReview,
                 max_output_tokens=1_024,
                 temperature=0.1,
-                thinking_config=types.ThinkingConfig(thinking_level=types.ThinkingLevel.MINIMAL),
+                thinking_config=types.ThinkingConfig(thinking_budget=0),
             ),
         )
         review = response.parsed
@@ -170,19 +170,34 @@ class BudgetedAiService:
         pricing: Pricing | None = None,
         max_input_tokens: int = 65_000,
         max_output_tokens: int = 1_024,
+        emergency_ledger: BudgetLedger | None = None,
+        emergency_owner_id: str = "project-emergency-cap",
     ) -> None:
         self.reviewer = reviewer
         self.ledger = ledger
         self.pricing = pricing or Pricing()
         self.maximum_cost = self.pricing.cost(max_input_tokens, max_output_tokens)
+        self.emergency_ledger = emergency_ledger
+        self.emergency_owner_id = emergency_owner_id
 
     def review(self, owner_id: str, cv_text: str, job_text: str) -> EvidenceReview:
         reservation = self.ledger.reserve(owner_id, self.maximum_cost)
+        emergency_reservation = None
+        if self.emergency_ledger is not None:
+            try:
+                emergency_reservation = self.emergency_ledger.reserve(
+                    self.emergency_owner_id, self.maximum_cost
+                )
+            except Exception:
+                self.ledger.release(reservation)
+                raise
         started = monotonic()
         try:
             review, input_tokens, output_tokens = self.reviewer.review(cv_text, job_text)
             actual_cost = self.pricing.cost(input_tokens, output_tokens)
             self.ledger.reconcile(reservation, actual_cost)
+            if self.emergency_ledger is not None and emergency_reservation is not None:
+                self.emergency_ledger.reconcile(emergency_reservation, actual_cost)
             emit(
                 "gemini.request.completed",
                 user_id=owner_id,
@@ -194,52 +209,56 @@ class BudgetedAiService:
             )
             return review
         except Exception:
-            self.ledger.release(reservation)
+            try:
+                self.ledger.release(reservation)
+            except ValueError:
+                pass
+            if self.emergency_ledger is not None and emergency_reservation is not None:
+                try:
+                    self.emergency_ledger.release(emergency_reservation)
+                except ValueError:
+                    pass
             emit("gemini.request.failed", user_id=owner_id, model=self.pricing.model)
             raise
 
 
-class UnrestrictedAiService:
-    """Runs AI for approved members without a product-level spending rejection."""
-
-    def __init__(self, reviewer: AiReviewer, *, pricing: Pricing | None = None) -> None:
+class BudgetedCvService:
+    def __init__(
+        self,
+        reviewer: CvReviewer,
+        ledger: BudgetLedger,
+        *,
+        pricing: Pricing | None = None,
+        max_input_tokens: int = 65_000,
+        max_output_tokens: int = 1_024,
+        emergency_ledger: BudgetLedger | None = None,
+        emergency_owner_id: str = "project-emergency-cap",
+    ) -> None:
         self.reviewer = reviewer
+        self.ledger = ledger
         self.pricing = pricing or Pricing()
-
-    def review(self, owner_id: str, cv_text: str, job_text: str) -> EvidenceReview:
-        started = monotonic()
-        try:
-            review, input_tokens, output_tokens = self.reviewer.review(cv_text, job_text)
-            emit(
-                "gemini.request.completed",
-                user_id=owner_id,
-                access_tier="approved",
-                model=self.pricing.model,
-                input_tokens=input_tokens,
-                output_tokens=output_tokens,
-                actual_micro_usd=self.pricing.cost(input_tokens, output_tokens),
-                duration_ms=round((monotonic() - started) * 1_000),
-            )
-            return review
-        except Exception:
-            emit(
-                "gemini.request.failed",
-                user_id=owner_id,
-                access_tier="approved",
-                model=self.pricing.model,
-            )
-            raise
-
-
-class UnrestrictedCvService:
-    def __init__(self, reviewer: CvReviewer, *, pricing: Pricing | None = None) -> None:
-        self.reviewer = reviewer
-        self.pricing = pricing or Pricing()
+        self.maximum_cost = self.pricing.cost(max_input_tokens, max_output_tokens)
+        self.emergency_ledger = emergency_ledger
+        self.emergency_owner_id = emergency_owner_id
 
     def review(self, owner_id: str, cv_text: str) -> CvReview:
+        reservation = self.ledger.reserve(owner_id, self.maximum_cost)
+        emergency_reservation = None
+        if self.emergency_ledger is not None:
+            try:
+                emergency_reservation = self.emergency_ledger.reserve(
+                    self.emergency_owner_id, self.maximum_cost
+                )
+            except Exception:
+                self.ledger.release(reservation)
+                raise
         started = monotonic()
         try:
             review, input_tokens, output_tokens = self.reviewer.review(cv_text)
+            actual_cost = self.pricing.cost(input_tokens, output_tokens)
+            self.ledger.reconcile(reservation, actual_cost)
+            if self.emergency_ledger is not None and emergency_reservation is not None:
+                self.emergency_ledger.reconcile(emergency_reservation, actual_cost)
             emit(
                 "gemini.cv_review.completed",
                 user_id=owner_id,
@@ -247,10 +266,19 @@ class UnrestrictedCvService:
                 model=self.pricing.model,
                 input_tokens=input_tokens,
                 output_tokens=output_tokens,
-                actual_micro_usd=self.pricing.cost(input_tokens, output_tokens),
+                actual_micro_usd=actual_cost,
                 duration_ms=round((monotonic() - started) * 1_000),
             )
             return review
         except Exception:
+            try:
+                self.ledger.release(reservation)
+            except ValueError:
+                pass
+            if self.emergency_ledger is not None and emergency_reservation is not None:
+                try:
+                    self.emergency_ledger.release(emergency_reservation)
+                except ValueError:
+                    pass
             emit("gemini.cv_review.failed", user_id=owner_id, model=self.pricing.model)
             raise

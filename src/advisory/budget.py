@@ -14,8 +14,8 @@ class BudgetExceededError(RuntimeError):
 
 @dataclass(frozen=True)
 class Pricing:
-    model: str = "gemini-3.5-flash-lite"
-    version: str = "2026-07-21"
+    model: str = "gemini-2.5-flash"
+    version: str = "2026-08-09"
     input_micro_usd_per_million: int = 300_000
     output_micro_usd_per_million: int = 2_500_000
 

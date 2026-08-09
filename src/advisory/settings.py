@@ -21,8 +21,16 @@ class Settings(BaseSettings):
     gcp_project: str = "ai-cv-advisory-board"
     gcp_location: str = "global"
     cv_bucket: str = "ai-cv-advisory-board-production-cvs"
-    gemini_model: str = "gemini-3.5-flash-lite"
+    gemini_model: str = "gemini-2.5-flash"
     ai_monthly_limit_micro_usd: int = Field(default=5_000_000, ge=100_000, le=100_000_000)
+    member_ai_monthly_limit_micro_usd: int = Field(
+        default=10_000_000, ge=100_000, le=100_000_000
+    )
+    project_ai_monthly_limit_micro_usd: int = Field(
+        default=50_000_000, ge=1_000_000, le=1_000_000_000
+    )
+    anonymous_ai_requests_per_minute: int = Field(default=2, ge=1, le=60)
+    member_ai_requests_per_minute: int = Field(default=10, ge=1, le=120)
 
 
 @lru_cache

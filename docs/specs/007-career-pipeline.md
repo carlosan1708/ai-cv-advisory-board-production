@@ -79,7 +79,7 @@ retry.
 
 ## Gemini contract
 
-- Model: `gemini-3.5-flash-lite`, stable GA, global endpoint, minimal thinking.
+- Model: `gemini-2.5-flash`, stable GA, global endpoint, thinking disabled.
 - Gemini is used only for structured role extraction and a bounded evidence review.
 - Input is limited to the selected CV text plus the current job description.
 - Output is JSON matching a strict schema and limited to 1,024 output tokens.
@@ -89,7 +89,7 @@ retry.
 
 ## Per-user hard budget
 
-- Default budget: USD 5.00 per verified user per calendar month, configurable by environment.
+- Default approved-user budget: USD 10.00 per verified user per calendar month, configurable by environment.
 - Money is represented as integer micro-US dollars.
 - Before a model request, the service atomically reserves the worst-case request cost in the user's monthly
   Firestore ledger.
@@ -100,7 +100,7 @@ retry.
 - The UI always shows used, reserved, and remaining AI budget.
 - Project-level Google Cloud spend caps provide a second guardrail but do not replace per-user enforcement.
 
-Initial Gemini 3.5 Flash-Lite standard pricing assumptions are configuration, not hard-coded business logic:
+Gemini 2.5 Flash standard pricing assumptions are configuration, not hard-coded business logic:
 USD 0.30 per million input tokens and USD 2.50 per million output/thinking tokens. A pricing-version field is
 stored with each ledger entry so future model changes do not rewrite history.
 

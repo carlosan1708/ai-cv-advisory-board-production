@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from collections.abc import Awaitable, Callable
 from pathlib import Path
@@ -21,14 +22,13 @@ from advisory.access import (
 from advisory.ai import (
     AiReviewer,
     BudgetedAiService,
+    BudgetedCvService,
     CvReviewer,
     DeterministicAiReviewer,
     DeterministicCvReviewer,
     EvidenceReview,
     GeminiAiReviewer,
     GeminiCvReviewer,
-    UnrestrictedAiService,
-    UnrestrictedCvService,
 )
 from advisory.auth import IdentityVerifier, UserIdentity
 from advisory.budget import BudgetExceededError, BudgetLedger, InMemoryBudgetLedger
@@ -44,6 +44,7 @@ from advisory.ingestion import (
     JobDescriptionFetcher,
 )
 from advisory.observability import emit
+from advisory.rate_limit import RateLimitExceededError, SlidingWindowRateLimiter
 from advisory.service import AssessmentService, InputError
 from advisory.settings import get_settings
 from advisory.tracker_service import TrackerService
@@ -67,9 +68,22 @@ async def browser_security(
         fetch_site = request.headers.get("sec-fetch-site", "").casefold()
         origin = request.headers.get("origin", "").rstrip("/")
         if fetch_site == "cross-site" or (origin and origin != _expected_origin(request)):
+            emit(
+                "security.cross_site_blocked",
+                method=request.method,
+                path=request.url.path,
+                fetch_site=fetch_site or "missing",
+            )
             return JSONResponse(status_code=403, content={"detail": "Cross-site request blocked"})
 
     response = await call_next(request)
+    if response.status_code in {401, 403}:
+        emit(
+            "security.access_denied",
+            method=request.method,
+            path=request.url.path,
+            status_code=response.status_code,
+        )
     response.headers["Content-Security-Policy"] = (
         "default-src 'self'; "
         "script-src 'self' https://accounts.google.com/gsi/client; "
@@ -100,11 +114,22 @@ if settings.repository_backend == "firestore":
     free_budget_ledger: BudgetLedger = FirestoreBudgetLedger(
         settings.gcp_project, settings.ai_monthly_limit_micro_usd
     )
+    member_budget_ledger: BudgetLedger = FirestoreBudgetLedger(
+        settings.gcp_project, settings.member_ai_monthly_limit_micro_usd
+    )
+    project_budget_ledger: BudgetLedger = FirestoreBudgetLedger(
+        settings.gcp_project, settings.project_ai_monthly_limit_micro_usd
+    )
     access_control: AccessControl = FirestoreAccessControl(settings.gcp_project, admin_emails)
 else:
     career_repository = InMemoryCareerRepository()
     free_budget_ledger = InMemoryBudgetLedger(settings.ai_monthly_limit_micro_usd)
+    member_budget_ledger = InMemoryBudgetLedger(settings.member_ai_monthly_limit_micro_usd)
+    project_budget_ledger = InMemoryBudgetLedger(settings.project_ai_monthly_limit_micro_usd)
     access_control = InMemoryAccessControl(admin_emails, allow_all=settings.auth_mode == "development")
+
+ai_rate_limiter = SlidingWindowRateLimiter()
+PROJECT_BUDGET_OWNER = "_project-emergency-cap"
 
 
 def owner_id(request: Request) -> str:
@@ -157,14 +182,24 @@ def ai_reviewer() -> AiReviewer:
 
 
 def free_ai_service() -> BudgetedAiService:
-    return BudgetedAiService(ai_reviewer(), free_budget_ledger)
+    return BudgetedAiService(
+        ai_reviewer(),
+        free_budget_ledger,
+        emergency_ledger=project_budget_ledger,
+        emergency_owner_id=PROJECT_BUDGET_OWNER,
+    )
 
 
-def member_ai_service() -> UnrestrictedAiService:
-    return UnrestrictedAiService(ai_reviewer())
+def member_ai_service() -> BudgetedAiService:
+    return BudgetedAiService(
+        ai_reviewer(),
+        member_budget_ledger,
+        emergency_ledger=project_budget_ledger,
+        emergency_owner_id=PROJECT_BUDGET_OWNER,
+    )
 
 
-def member_cv_service() -> UnrestrictedCvService:
+def member_cv_service() -> BudgetedCvService:
     reviewer: CvReviewer
     if settings.environment == "production":
         reviewer = GeminiCvReviewer(
@@ -174,17 +209,41 @@ def member_cv_service() -> UnrestrictedCvService:
         )
     else:
         reviewer = DeterministicCvReviewer()
-    return UnrestrictedCvService(reviewer)
+    return BudgetedCvService(
+        reviewer,
+        member_budget_ledger,
+        emergency_ledger=project_budget_ledger,
+        emergency_owner_id=PROJECT_BUDGET_OWNER,
+    )
 
 
-def free_budget() -> dict[str, int]:
-    snapshot = free_budget_ledger.snapshot("anonymous-free-tier")
+def _budget_payload(ledger: BudgetLedger, owner: str) -> dict[str, int]:
+    snapshot = ledger.snapshot(owner)
     return {
         "limit_micro_usd": snapshot.limit_micro_usd,
         "used_micro_usd": snapshot.used_micro_usd,
         "reserved_micro_usd": snapshot.reserved_micro_usd,
         "remaining_micro_usd": snapshot.remaining_micro_usd,
     }
+
+
+def free_budget() -> dict[str, int]:
+    return _budget_payload(free_budget_ledger, "anonymous-free-tier")
+
+
+def _anonymous_rate_key(request: Request) -> str:
+    forwarded = request.headers.get("x-forwarded-for", "")
+    peer = request.client.host if request.client else "unknown"
+    digest = hashlib.sha256(f"{forwarded}|{peer}".encode()).hexdigest()[:20]
+    return f"anonymous:{digest}"
+
+
+def _enforce_ai_rate(key: str, limit: int, tier: str) -> None:
+    try:
+        ai_rate_limiter.check(key, limit)
+    except RateLimitExceededError:
+        emit("security.ai_burst_blocked", access_tier=tier)
+        raise
 
 
 def render(
@@ -455,8 +514,12 @@ async def standalone_cv_review(request: Request, cv_version_id: str) -> dict[str
         version = career_repository.get_cv_version(owner, cv_version_id)
     except NotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
-    review = await run_in_threadpool(member_cv_service().review, owner, version.extracted_text)
-    return {"review": review.model_dump(), "unlimited": True}
+    try:
+        _enforce_ai_rate(owner, settings.member_ai_requests_per_minute, "approved")
+        review = await run_in_threadpool(member_cv_service().review, owner, version.extracted_text)
+    except (BudgetExceededError, RateLimitExceededError) as exc:
+        raise HTTPException(status_code=429, detail=str(exc)) from exc
+    return {"review": review.model_dump(), "budget": _budget_payload(member_budget_ledger, owner)}
 
 
 @app.get("/api/cv-versions/{cv_version_id}/download")
@@ -474,9 +537,8 @@ def download_cv_version(request: Request, cv_version_id: str) -> Response:
 
 
 @app.get("/api/ai/budget")
-def ai_budget(request: Request) -> dict[str, bool]:
-    owner_id(request)
-    return {"unlimited": True}
+def ai_budget(request: Request) -> dict[str, int]:
+    return _budget_payload(member_budget_ledger, owner_id(request))
 
 
 @app.get("/api/free-ai/budget")
@@ -503,18 +565,23 @@ async def application_ai_review(
             raise HTTPException(status_code=422, detail=str(exc)) from exc
     if not resolved_job:
         raise HTTPException(status_code=422, detail="Add a job description or public job link first")
-    review = await run_in_threadpool(
-        member_ai_service().review,
-        owner_id(request),
-        version.extracted_text,
-        resolved_job,
-    )
+    owner = owner_id(request)
+    try:
+        _enforce_ai_rate(owner, settings.member_ai_requests_per_minute, "approved")
+        review = await run_in_threadpool(
+            member_ai_service().review,
+            owner,
+            version.extracted_text,
+            resolved_job,
+        )
+    except (BudgetExceededError, RateLimitExceededError) as exc:
+        raise HTTPException(status_code=429, detail=str(exc)) from exc
     career_repository.update_application(
         owner_id(request),
         application_id,
         ApplicationUpdate(fit_score=review.fit_score, ai_summary=review.summary),
     )
-    return {"review": review.model_dump(), "unlimited": True}
+    return {"review": review.model_dump(), "budget": _budget_payload(member_budget_ledger, owner)}
 
 
 @app.get("/workspace", response_class=HTMLResponse)
@@ -629,6 +696,9 @@ async def analyze(
     ai_review: EvidenceReview | None = None
     ai_notice = ""
     try:
+        _enforce_ai_rate(
+            _anonymous_rate_key(request), settings.anonymous_ai_requests_per_minute, "anonymous"
+        )
         ai_review = await run_in_threadpool(
             free_ai_service().review,
             "anonymous-free-tier",
@@ -641,6 +711,8 @@ async def analyze(
             "The evidence review below still works without a model call."
         )
         emit("gemini.free_pool.exhausted")
+    except RateLimitExceededError:
+        ai_notice = "Free AI is limited to two attempts per minute. The evidence review still completed."
     except Exception as exc:
         ai_notice = (
             "Gemini is temporarily unavailable. The evidence review below was completed without a model call."

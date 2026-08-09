@@ -30,7 +30,7 @@ def test_tracker_page_has_board_funnel_and_fast_add() -> None:
     assert "data-board" in response.text
     assert "data-application-dialog" in response.text
     assert "data-cv-dialog" in response.text
-    assert "No in-app cap" in response.text
+    assert "$10 per user" in response.text
     assert client.get("/dashboard").status_code == 200
 
 
@@ -130,9 +130,10 @@ def test_cv_can_be_reviewed_and_revised_without_an_application() -> None:
     assert len(client.get("/api/cv-versions", headers=headers).json()) == 2
 
 
-def test_member_ai_is_unrestricted_and_free_pool_has_hard_limit() -> None:
+def test_member_and_free_ai_pools_have_hard_limits() -> None:
     payload = client.get("/api/ai/budget", headers={"x-advisory-user": "alice"}).json()
-    assert payload == {"unlimited": True}
+    assert payload["limit_micro_usd"] == 10_000_000
+    assert payload["remaining_micro_usd"] <= payload["limit_micro_usd"]
     free_payload = client.get("/api/free-ai/budget").json()
     assert free_payload["limit_micro_usd"] == 5_000_000
     assert free_payload["remaining_micro_usd"] <= free_payload["limit_micro_usd"]

@@ -4,12 +4,11 @@ import pytest
 
 from advisory.ai import (
     BudgetedAiService,
+    BudgetedCvService,
     DeterministicAiReviewer,
     DeterministicCvReviewer,
     EvidenceReview,
     GeminiAiReviewer,
-    UnrestrictedAiService,
-    UnrestrictedCvService,
 )
 from advisory.budget import BudgetExceededError, InMemoryBudgetLedger, Pricing
 
@@ -94,34 +93,48 @@ def test_gemini_adapter_requests_strict_bounded_json() -> None:
 
     reviewer = GeminiAiReviewer.__new__(GeminiAiReviewer)
     reviewer.client = SimpleNamespace(models=Models())
-    reviewer.model = "gemini-3.5-flash-lite"
+    reviewer.model = "gemini-2.5-flash"
     review, input_tokens, output_tokens = reviewer.review("CV evidence", "Job needs")
     assert review == expected
     assert (input_tokens, output_tokens) == (500, 100)
-    assert captured["model"] == "gemini-3.5-flash-lite"
+    assert captured["model"] == "gemini-2.5-flash"
     config = captured["config"]
     assert config.max_output_tokens == 1_024  # type: ignore[union-attr]
     assert config.response_mime_type == "application/json"  # type: ignore[union-attr]
 
 
-def test_unrestricted_service_calls_reviewer_without_a_ledger() -> None:
+def test_budgeted_service_enforces_user_and_project_caps() -> None:
     expected = EvidenceReview(
-        fit_score=92,
+        fit_score=90,
         summary="Grounded",
         supported_strengths=["Python"],
         evidence_gaps=[],
-        next_actions=["Verify evidence"],
+        next_actions=["Verify"],
     )
 
     class Reviewer:
         def review(self, cv_text: str, job_text: str) -> tuple[EvidenceReview, int, int]:
-            assert (cv_text, job_text) == ("CV", "JOB")
-            return expected, 20, 5
+            return expected, 100, 10
 
-    assert UnrestrictedAiService(Reviewer()).review("member", "CV", "JOB") == expected
+    user_ledger = InMemoryBudgetLedger(1_000_000)
+    project_ledger = InMemoryBudgetLedger(100)
+    service = BudgetedAiService(Reviewer(), user_ledger, emergency_ledger=project_ledger)
+    with pytest.raises(BudgetExceededError):
+        service.review("member", "CV", "JOB")
+    assert user_ledger.snapshot("member").reserved_micro_usd == 0
 
 
-def test_standalone_cv_reviewer_scores_structure_and_unrestricted_service() -> None:
+def test_budgeted_cv_service_reconciles_both_ledgers() -> None:
+    reviewer = DeterministicCvReviewer()
+    user_ledger = InMemoryBudgetLedger(10_000_000)
+    project_ledger = InMemoryBudgetLedger(50_000_000)
+    service = BudgetedCvService(reviewer, user_ledger, emergency_ledger=project_ledger)
+    assert service.review("member", "EXPERIENCE\nBuilt systems").summary
+    assert user_ledger.snapshot("member").reserved_micro_usd == 0
+    assert project_ledger.snapshot("project-emergency-cap").reserved_micro_usd == 0
+
+
+def test_standalone_cv_reviewer_scores_structure() -> None:
     reviewer = DeterministicCvReviewer()
     review, input_tokens, output_tokens = reviewer.review(
         "EXPERIENCE\nBuilt services for 50 teams\nSKILLS\nPython\nEDUCATION\nComputer Science"
@@ -129,4 +142,3 @@ def test_standalone_cv_reviewer_scores_structure_and_unrestricted_service() -> N
     assert review.quality_score >= 80
     assert "Includes quantified evidence" in review.strengths
     assert input_tokens == output_tokens == 0
-    assert UnrestrictedCvService(reviewer).review("member", "EXPERIENCE\nBuilt systems").summary

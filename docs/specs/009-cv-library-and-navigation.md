@@ -34,7 +34,7 @@ Administrators additionally see **Access**. Desktop uses a persistent top-level 
 - Saving edited text creates a child version and leaves the parent unchanged.
 - Application review works with either a public job URL or pasted description.
 - Desktop and mobile navigation always expose Dashboard, CV Library, and Free Review.
-- AI calls for approved members remain unrestricted at the application layer and emit token/cost observability without document contents.
+- AI calls for approved members share that user's USD 10 monthly allowance and emit token/cost observability without document contents.
 
 ## Regression coverage
 

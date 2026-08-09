@@ -2,7 +2,7 @@
 
 A spec-first reconstruction of the AI CV Advisory Board. The repository is intended to demonstrate not only a product, but a repeatable engineering process: explicit requirements, architectural decisions, threat modeling, deterministic evaluation, automated tests, observability, and browser-level regression evidence.
 
-The product has two access tiers: a no-login, session-only Gemini review backed by one shared monthly USD 5 hard cap, and an administrator-approved private workspace whose members have no in-app AI usage restriction. See [Spec 008](docs/specs/008-tiered-access.md).
+The product has two access tiers: a no-login, session-only Gemini review backed by one shared monthly USD 5 hard cap, and an administrator-approved private workspace with a USD 10 monthly AI allowance per member. Both tiers share a USD 50 project emergency ceiling. See [Spec 008](docs/specs/008-tiered-access.md).
 
 The private workspace now treats CVs as independent, versioned assets: members can review a CV without an application, edit extracted text into a new immutable version, and later compare an attached version against a tracked role. See [Spec 009](docs/specs/009-cv-library-and-navigation.md).
 
@@ -22,8 +22,8 @@ Browser-facing security is enforced at the HTTP boundary with same-origin write 
 - See matched requirements, evidence gaps, and safe recommendations.
 - Use a synthetic demo without an API key.
 - Export a JSON result carrying schema and scoring versions.
-- Use Gemini 3.5 Flash-Lite for bounded structured evidence reviews in production.
-- Enforce a configurable $5 monthly per-user AI cap using atomic pre-call reservations.
+- Use Gemini 2.5 Flash for bounded structured evidence reviews in production.
+- Enforce shared $5 anonymous, $10 member, and $50 project ceilings using atomic pre-call reservations.
 - Run unit, security, integration, evaluation, and Playwright browser tests without paid services.
 - Recover from file parsing and job-page failures without re-entering the entire review.
 

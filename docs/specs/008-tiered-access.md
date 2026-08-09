@@ -5,7 +5,7 @@
 The product has two explicit entry modes:
 
 1. **Free AI review** — anonymous, session-only CV-to-job analysis using Gemini. All anonymous traffic shares one monthly USD 5 application-level budget. The server reserves worst-case request cost atomically before calling the model. When the pool is exhausted or Gemini fails, the deterministic evidence engine still returns a useful result.
-2. **Private workspace** — Google-authenticated application tracking, immutable CV versions, and AI evidence reviews. Access is available only to emails approved by the administrator. Approved members have no application-level AI usage cap.
+2. **Private workspace** — Google-authenticated application tracking, immutable CV versions, and AI evidence reviews. Access is available only to emails approved by the administrator. Each approved member has a USD 10 monthly AI allowance.
 
 ## Security boundary
 
@@ -30,6 +30,6 @@ The product has two explicit entry modes:
 
 ## Regression coverage
 
-- Unit tests cover budget reservation/reconciliation, unrestricted member calls, identity verification, and access lifecycle.
-- API tests cover the two-mode page, free hard cap, unrestricted member entitlement, and admin authorization.
+- Unit tests cover user/project budget reservation and reconciliation, identity verification, and access lifecycle.
+- API tests cover the two-mode page, tier hard caps, burst controls, and admin authorization.
 - Playwright covers desktop/mobile mode selection, the free upload flow, private sign-in gate, pipeline interactions, and browser console errors.
