@@ -7,6 +7,7 @@
   const empty = document.querySelector("[data-empty]");
   const appDialog = document.querySelector("[data-application-dialog]");
   const cvDialog = document.querySelector("[data-cv-dialog]");
+  const applicationReviewDialog = document.querySelector("[data-application-review-dialog]");
 
   async function api(url, options = {}) {
     options.headers = { ...(options.headers || {}), ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}) };
@@ -36,7 +37,7 @@
     attachment.textContent = versionLabel ? `CV · ${versionLabel}` : "No CV attached";
     attachment.classList.toggle("empty", !versionLabel);
     const aiButton = card.querySelector(".ai-review-button");
-    aiButton.hidden = !(versionLabel && application.job_url);
+    aiButton.hidden = true;
     aiButton.addEventListener("click", async () => {
       aiButton.disabled = true; aiButton.textContent = "Reviewing evidence…";
       try {
@@ -44,6 +45,18 @@
         application.fit_score = result.review.fit_score; application.ai_summary = result.review.summary;
         render();
       } catch (error) { aiButton.disabled = false; aiButton.textContent = error.message; }
+    });
+    const reviewButton = card.querySelector(".application-review-button");
+    reviewButton.hidden = !versionLabel;
+    reviewButton.addEventListener("click", () => {
+      const form = applicationReviewDialog.querySelector("[data-application-review-form]");
+      form.reset();
+      form.elements.application_id.value = application.id;
+      applicationReviewDialog.querySelector("[data-application-review-title]").textContent = `${application.role} at ${application.company}`;
+      applicationReviewDialog.querySelector("[data-application-review-cv]").textContent = `Attached CV · ${versionLabel}`;
+      applicationReviewDialog.querySelector("[data-application-review-job]").textContent = application.job_url ? "Public job link saved" : "Paste the job description below";
+      applicationReviewDialog.querySelector("[data-application-review-error]").textContent = "";
+      applicationReviewDialog.showModal();
     });
     card.querySelector(".ai-summary").textContent = application.ai_summary ? `${application.fit_score}% evidence fit · ${application.ai_summary}` : "";
     const select = card.querySelector("select");
@@ -137,6 +150,18 @@
     event.preventDefault(); const form = event.currentTarget; document.querySelector("[data-cv-error]").textContent = "";
     try { state.cvs.unshift(await api("/api/cv-versions", { method: "POST", body: new FormData(form) })); form.reset(); renderCvLibrary(); render(); }
     catch (error) { document.querySelector("[data-cv-error]").textContent = error.message; }
+  });
+  document.querySelector("[data-application-review-form]").addEventListener("submit", async (event) => {
+    if (event.submitter?.value === "cancel") return;
+    event.preventDefault();
+    const form = event.currentTarget; const data = new FormData(form); const id = data.get("application_id");
+    const application = state.applications.find((item) => item.id === id);
+    const error = document.querySelector("[data-application-review-error]"); error.textContent = "";
+    try {
+      const result = await api(`/api/applications/${id}/ai-review`, { method: "POST", body: data });
+      application.fit_score = result.review.fit_score; application.ai_summary = result.review.summary;
+      applicationReviewDialog.close(); render();
+    } catch (exc) { error.textContent = exc.message; }
   });
   document.querySelectorAll("[data-filter]").forEach((button) => button.addEventListener("click", () => { state.filter = button.dataset.filter; document.querySelector("[data-mobile-filter]").value = state.filter; render(); }));
   document.querySelector("[data-clear-filter]").addEventListener("click", () => { state.filter = "all"; render(); });

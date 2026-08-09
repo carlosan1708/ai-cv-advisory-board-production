@@ -19,10 +19,14 @@ from advisory.access import (
 from advisory.ai import (
     AiReviewer,
     BudgetedAiService,
+    CvReviewer,
     DeterministicAiReviewer,
+    DeterministicCvReviewer,
     EvidenceReview,
     GeminiAiReviewer,
+    GeminiCvReviewer,
     UnrestrictedAiService,
+    UnrestrictedCvService,
 )
 from advisory.auth import IdentityVerifier, UserIdentity
 from advisory.budget import BudgetExceededError, BudgetLedger, InMemoryBudgetLedger
@@ -114,6 +118,19 @@ def member_ai_service() -> UnrestrictedAiService:
     return UnrestrictedAiService(ai_reviewer())
 
 
+def member_cv_service() -> UnrestrictedCvService:
+    reviewer: CvReviewer
+    if settings.environment == "production":
+        reviewer = GeminiCvReviewer(
+            project=settings.gcp_project,
+            location=settings.gcp_location,
+            model=settings.gemini_model,
+        )
+    else:
+        reviewer = DeterministicCvReviewer()
+    return UnrestrictedCvService(reviewer)
+
+
 def free_budget() -> dict[str, int]:
     snapshot = free_budget_ledger.snapshot("anonymous-free-tier")
     return {
@@ -180,12 +197,25 @@ def home(request: Request) -> HTMLResponse:
 
 
 @app.get("/tracker", response_class=HTMLResponse)
+@app.get("/dashboard", response_class=HTMLResponse)
 def tracker(request: Request) -> HTMLResponse:
     return templates.TemplateResponse(
         request=request,
         name="tracker.html",
         context={
             "ai_limit_dollars": settings.ai_monthly_limit_micro_usd / 1_000_000,
+            "auth_mode": settings.auth_mode,
+            "google_oauth_client_id": settings.google_oauth_client_id,
+        },
+    )
+
+
+@app.get("/cvs", response_class=HTMLResponse)
+def cv_library(request: Request) -> HTMLResponse:
+    return templates.TemplateResponse(
+        request=request,
+        name="cvs.html",
+        context={
             "auth_mode": settings.auth_mode,
             "google_oauth_client_id": settings.google_oauth_client_id,
         },
@@ -276,6 +306,15 @@ def list_cv_versions(request: Request) -> list[dict[str, object]]:
     return [item.model_dump(mode="json", exclude={"extracted_text"}) for item in versions]
 
 
+@app.get("/api/cv-versions/{cv_version_id}")
+def get_cv_version(request: Request, cv_version_id: str) -> dict[str, object]:
+    try:
+        version = career_repository.get_cv_version(owner_id(request), cv_version_id)
+    except NotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return version.model_dump(mode="json")
+
+
 @app.post("/api/cv-versions", status_code=201)
 async def create_cv_version(
     request: Request,
@@ -295,6 +334,47 @@ async def create_cv_version(
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     emit("cv_version.created", user_id=owner_id(request), cv_version_id=item.id, file_bytes=item.byte_count)
     return item.model_dump(mode="json", exclude={"extracted_text"})
+
+
+@app.post("/api/cv-versions/{cv_version_id}/revisions", status_code=201)
+def create_cv_revision(
+    request: Request,
+    cv_version_id: str,
+    label: str = Form(...),
+    cv_text: str = Form(...),
+) -> dict[str, object]:
+    owner = owner_id(request)
+    try:
+        parent = career_repository.get_cv_version(owner, cv_version_id)
+        content = cv_text.strip().encode("utf-8")
+        item = tracker_service().create_cv_version(
+            owner,
+            label=label,
+            filename=f"{Path(parent.filename).stem}-revised.txt",
+            content_type="text/plain",
+            content=content,
+            parent_version_id=parent.id,
+        )
+    except (NotFoundError, CvDocumentError, ValueError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    emit(
+        "cv_version.revised",
+        user_id=owner,
+        cv_version_id=item.id,
+        parent_version_id=parent.id,
+    )
+    return item.model_dump(mode="json", exclude={"extracted_text"})
+
+
+@app.post("/api/cv-versions/{cv_version_id}/ai-review")
+async def standalone_cv_review(request: Request, cv_version_id: str) -> dict[str, object]:
+    owner = owner_id(request)
+    try:
+        version = career_repository.get_cv_version(owner, cv_version_id)
+    except NotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    review = await run_in_threadpool(member_cv_service().review, owner, version.extracted_text)
+    return {"review": review.model_dump(), "unlimited": True}
 
 
 @app.get("/api/cv-versions/{cv_version_id}/download")

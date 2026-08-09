@@ -23,6 +23,7 @@ class TrackerService:
         filename: str,
         content_type: str,
         content: bytes,
+        parent_version_id: str | None = None,
     ) -> CvVersion:
         safe_filename = Path(filename).name
         clean_label = label.strip()
@@ -40,6 +41,7 @@ class TrackerService:
             byte_count=len(content),
             sha256=sha256(content).hexdigest(),
             extracted_text=extracted_text,
+            parent_version_id=parent_version_id,
             created_at=datetime.now(UTC),
         )
         return self.repository.create_cv_version(version, content)

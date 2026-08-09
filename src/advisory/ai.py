@@ -17,8 +17,20 @@ class EvidenceReview(BaseModel):
     next_actions: list[str] = Field(max_length=4)
 
 
+class CvReview(BaseModel):
+    quality_score: int = Field(ge=0, le=100)
+    summary: str = Field(max_length=700)
+    strengths: list[str] = Field(max_length=5)
+    improvement_areas: list[str] = Field(max_length=5)
+    next_actions: list[str] = Field(max_length=5)
+
+
 class AiReviewer(Protocol):
     def review(self, cv_text: str, job_text: str) -> tuple[EvidenceReview, int, int]: ...
+
+
+class CvReviewer(Protocol):
+    def review(self, cv_text: str) -> tuple[CvReview, int, int]: ...
 
 
 class DeterministicAiReviewer:
@@ -73,6 +85,74 @@ JOB DESCRIPTION:
         review = response.parsed
         if not isinstance(review, EvidenceReview):
             review = EvidenceReview.model_validate_json(response.text or "{}")
+        usage = response.usage_metadata
+        input_tokens = int(getattr(usage, "prompt_token_count", 0) or 0)
+        output_tokens = int(getattr(usage, "candidates_token_count", 0) or 0) + int(
+            getattr(usage, "thoughts_token_count", 0) or 0
+        )
+        return review, input_tokens, output_tokens
+
+
+class DeterministicCvReviewer:
+    def review(self, cv_text: str) -> tuple[CvReview, int, int]:
+        lowered = cv_text.casefold()
+        strengths = []
+        if "experience" in lowered:
+            strengths.append("Experience is clearly identified")
+        if "skills" in lowered:
+            strengths.append("Skills are easy to locate")
+        if any(character.isdigit() for character in cv_text):
+            strengths.append("Includes quantified evidence")
+        gaps = []
+        if not any(character.isdigit() for character in cv_text):
+            gaps.append("Add truthful metrics or scale where available")
+        if "education" not in lowered:
+            gaps.append("Clarify education or relevant credentials")
+        score = min(100, 45 + len(strengths) * 15 - len(gaps) * 5)
+        return (
+            CvReview(
+                quality_score=score,
+                summary="A structural CV check is shown while Gemini is unavailable.",
+                strengths=strengths or ["The CV contains readable text"],
+                improvement_areas=gaps or ["Tighten bullets around outcomes and evidence"],
+                next_actions=["Review every change for accuracy before saving a new version"],
+            ),
+            0,
+            0,
+        )
+
+
+class GeminiCvReviewer:
+    def __init__(self, *, project: str, location: str, model: str) -> None:
+        from google import genai
+
+        self.client = genai.Client(vertexai=True, project=project, location=location)
+        self.model = model
+
+    def review(self, cv_text: str) -> tuple[CvReview, int, int]:
+        from google.genai import types
+
+        prompt = f"""Audit this CV as a standalone professional document. Do not assume a target job.
+Return only the requested JSON. Never invent experience. Evaluate clarity, evidence, structure, specificity,
+and seniority signaling. Keep the summary under 80 words and list items under 25 words.
+
+CV:
+{cv_text}
+"""
+        response = self.client.models.generate_content(
+            model=self.model,
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json",
+                response_schema=CvReview,
+                max_output_tokens=1_024,
+                temperature=0.1,
+                thinking_config=types.ThinkingConfig(thinking_level=types.ThinkingLevel.MINIMAL),
+            ),
+        )
+        review = response.parsed
+        if not isinstance(review, CvReview):
+            review = CvReview.model_validate_json(response.text or "{}")
         usage = response.usage_metadata
         input_tokens = int(getattr(usage, "prompt_token_count", 0) or 0)
         output_tokens = int(getattr(usage, "candidates_token_count", 0) or 0) + int(
@@ -148,4 +228,29 @@ class UnrestrictedAiService:
                 access_tier="approved",
                 model=self.pricing.model,
             )
+            raise
+
+
+class UnrestrictedCvService:
+    def __init__(self, reviewer: CvReviewer, *, pricing: Pricing | None = None) -> None:
+        self.reviewer = reviewer
+        self.pricing = pricing or Pricing()
+
+    def review(self, owner_id: str, cv_text: str) -> CvReview:
+        started = monotonic()
+        try:
+            review, input_tokens, output_tokens = self.reviewer.review(cv_text)
+            emit(
+                "gemini.cv_review.completed",
+                user_id=owner_id,
+                access_tier="approved",
+                model=self.pricing.model,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                actual_micro_usd=self.pricing.cost(input_tokens, output_tokens),
+                duration_ms=round((monotonic() - started) * 1_000),
+            )
+            return review
+        except Exception:
+            emit("gemini.cv_review.failed", user_id=owner_id, model=self.pricing.model)
             raise

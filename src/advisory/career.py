@@ -119,4 +119,5 @@ class CvVersion(BaseModel):
     byte_count: int
     sha256: str
     extracted_text: str
+    parent_version_id: str | None = None
     created_at: datetime

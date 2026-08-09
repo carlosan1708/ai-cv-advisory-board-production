@@ -6,7 +6,7 @@
   <title>Application pipeline · AI CV Advisory Board</title>
   <meta name="description" content="Track every application, next action, and the exact CV version you sent.">
   <link rel="stylesheet" href="/static/app.css?v=7">
-  <link rel="stylesheet" href="/static/tracker.css?v=2">
+  <link rel="stylesheet" href="/static/tracker.css?v=3">
   {% if auth_mode == "google" %}<script src="https://accounts.google.com/gsi/client" async defer></script>{% endif %}
 </head>
 <body class="tracker-page">
@@ -29,8 +29,9 @@
       <span class="brand-copy"><strong>AI CV</strong><small>Career workspace</small></span>
     </a>
     <nav aria-label="Primary navigation">
-      <a class="active" href="/tracker">Pipeline</a>
-      <a href="/workspace">Evidence review</a>
+      <a class="active" href="/dashboard">Dashboard</a>
+      <a href="/cvs">CV Library</a>
+      <a href="/workspace">Free Review</a>
       <a href="/admin" data-admin-link hidden>Access</a>
     </nav>
     <button class="button button-primary button-small" type="button" data-open-application>+ Add application</button>
@@ -39,8 +40,8 @@
   <main class="tracker-shell">
     <section class="tracker-intro">
       <div>
-        <span class="overline">Your search, at a glance</span>
-        <h1>Keep every opportunity moving.</h1>
+        <span class="overline">Application dashboard</span>
+        <h1>Your search, at a glance.</h1>
         <p>Track what happens next and preserve the exact CV you sent—without turning your job search into admin work.</p>
       </div>
       <div class="budget-chip" data-budget aria-label="Approved member AI access">
@@ -66,7 +67,7 @@
       <div class="board-heading">
         <div><span class="overline">Workspace</span><h2 id="board-title">Applications</h2></div>
         <div class="board-actions">
-          <button class="button button-secondary button-small" type="button" data-open-cv>CV library</button>
+          <a class="button button-secondary button-small" href="/cvs">Open CV library</a>
           <button class="button button-primary button-small" type="button" data-open-application>Add application</button>
         </div>
       </div>
@@ -92,6 +93,7 @@
       </div>
     </section>
   </main>
+  <nav class="mobile-workspace-nav tracker-mobile-nav" aria-label="Mobile workspace navigation"><a class="active" href="/dashboard">Dashboard</a><a href="/cvs">CVs</a><a href="/workspace">Review</a></nav>
 
   <dialog class="tracker-dialog" data-application-dialog>
     <form method="dialog" data-application-form>
@@ -141,17 +143,30 @@
     </form>
   </dialog>
 
+  <dialog class="tracker-dialog compact-dialog" data-application-review-dialog>
+    <form method="dialog" data-application-review-form>
+      <div class="dialog-heading"><div><span class="overline">Application evidence review</span><h2 data-application-review-title>Review attached CV</h2></div><button class="icon-button" value="cancel" aria-label="Close">&times;</button></div>
+      <p class="dialog-lede">We will compare the attached library version with this application. If the public job link is unavailable, paste the description below.</p>
+      <div class="review-context"><strong data-application-review-cv></strong><span data-application-review-job></span></div>
+      <input name="application_id" type="hidden">
+      <label>Job description <span class="optional-label">Optional when a public job link is saved</span><textarea name="job_text" rows="8" placeholder="Paste the role responsibilities and requirements…"></textarea></label>
+      <p class="form-error" data-application-review-error></p>
+      <div class="dialog-actions"><button class="button button-secondary" value="cancel">Cancel</button><button class="button button-primary" type="submit" value="default">Review attached CV</button></div>
+    </form>
+  </dialog>
+
   <template id="application-card-template">
     <article class="application-card" draggable="true">
       <div class="card-top"><span class="company-mark" aria-hidden="true"></span><span class="card-date"></span></div>
       <h3></h3><p class="company-name"></p>
       <p class="next-action"></p>
       <div class="cv-attachment"></div>
-      <button class="ai-review-button" type="button" hidden>Review evidence with AI</button>
+      <button class="ai-review-button" type="button" hidden>Review attached CV</button>
+      <button class="application-review-button ai-review-button" type="button" hidden>Review attached CV</button>
       <p class="ai-summary"></p>
       <label class="status-control">Move to<select></select></label>
     </article>
   </template>
-  <script src="/static/tracker.js?v=3" defer></script>
+  <script src="/static/tracker.js?v=4" defer></script>
 </body>
 </html>

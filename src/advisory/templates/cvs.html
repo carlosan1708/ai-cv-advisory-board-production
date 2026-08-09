@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CV library | AI CV Advisory Board</title>
+  <meta name="description" content="Review, revise, and preserve every CV version independently of applications.">
+  <link rel="stylesheet" href="/static/app.css?v=8"><link rel="stylesheet" href="/static/tracker.css?v=3"><link rel="stylesheet" href="/static/cvs.css?v=1">
+  {% if auth_mode == "google" %}<script src="https://accounts.google.com/gsi/client" async defer></script>{% endif %}
+</head>
+<body class="tracker-page cv-page">
+  {% if auth_mode == "google" %}
+  <section class="auth-gate" data-auth-gate data-client-id="{{ google_oauth_client_id }}"><div class="auth-panel"><a class="auth-back" href="/">&larr; Choose another mode</a><div class="auth-brand"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span><span class="overline">Private workspace</span></div><h1>Open your CV library.</h1><p>Sign in with an approved Google account to review, revise, and preserve your CV versions.</p><div class="auth-signin" data-google-signin></div><div class="access-state" data-access-state hidden><strong data-access-title></strong><p data-access-copy></p><button class="button button-primary" type="button" data-request-access>Request access</button></div><small data-auth-error role="alert"></small></div></section>
+  {% endif %}
+  <header class="tracker-header workspace-header-nav">
+    <a class="brand" href="/dashboard"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span><span class="brand-copy"><strong>AI CV</strong><small>Career workspace</small></span></a>
+    <nav aria-label="Workspace navigation"><a href="/dashboard">Dashboard</a><a class="active" href="/cvs">CV Library</a><a href="/workspace">Free Review</a><a href="/admin" data-admin-link hidden>Access</a></nav>
+    <button class="button button-primary button-small" type="button" data-open-upload>Upload CV</button>
+  </header>
+  <main class="cv-shell">
+    <section class="cv-hero"><div><span class="overline">Independent CV workspace</span><h1>Your CV library.</h1><p>Review a CV on its own, edit its extracted text, and save every change as a new immutable version. Applications can attach any version from this library.</p></div><div class="cv-principle"><strong>Versions, not overwrites</strong><span>Your original file always remains available.</span></div></section>
+    <section class="cv-toolbar"><div><h2>Saved versions</h2><span data-cv-count>0 versions</span></div><button class="button button-primary" type="button" data-open-upload>Upload a CV</button></section>
+    <div class="cv-grid" data-cv-grid></div>
+    <section class="cv-empty" data-cv-empty><span>CV</span><h2>Build your library once.</h2><p>Upload the CV you use today. You can review it without an application and create tailored versions later.</p><button class="button button-primary" type="button" data-open-upload>Upload your first CV</button></section>
+  </main>
+  <nav class="mobile-workspace-nav" aria-label="Mobile workspace navigation"><a href="/dashboard">Dashboard</a><a class="active" href="/cvs">CVs</a><a href="/workspace">Review</a></nav>
+
+  <dialog class="tracker-dialog compact-dialog" data-upload-dialog><form method="dialog" data-upload-form enctype="multipart/form-data"><div class="dialog-heading"><div><span class="overline">New source document</span><h2>Upload a CV</h2></div><button class="icon-button" value="cancel" aria-label="Close">&times;</button></div><p class="dialog-lede">Give this file a meaningful label so it is easy to attach to an application later.</p><label>Version label <input name="label" maxlength="100" required placeholder="General AI engineering · August 2026"></label><label class="file-drop">CV file <input name="cv_file" type="file" accept=".pdf,.txt,application/pdf,text/plain" required><small>PDF or TXT · up to 5 MB</small></label><p class="form-error" data-upload-error role="alert"></p><div class="dialog-actions"><button class="button button-secondary" value="cancel">Cancel</button><button class="button button-primary" type="submit" value="default">Add to library</button></div></form></dialog>
+
+  <dialog class="tracker-dialog cv-review-dialog" data-review-dialog><form method="dialog"><div class="dialog-heading"><div><span class="overline">Standalone review</span><h2 data-review-title>CV review</h2></div><button class="icon-button" value="cancel" aria-label="Close">&times;</button></div><div class="review-loading" data-review-loading>Reviewing clarity, evidence, structure, and seniority signaling…</div><div class="cv-review-result" data-review-result hidden><div class="review-score"><strong data-review-score>0</strong><span>/100</span></div><div><p data-review-summary></p><div class="review-columns"><section><h3>Strengths</h3><ul data-review-strengths></ul></section><section><h3>Improve</h3><ul data-review-gaps></ul></section><section><h3>Next actions</h3><ul data-review-actions></ul></section></div></div></div><p class="form-error" data-review-error></p><div class="dialog-actions"><button class="button button-secondary" value="cancel">Close</button><button class="button button-primary" type="button" data-edit-from-review>Edit as new version</button></div></form></dialog>
+
+  <dialog class="tracker-dialog cv-editor-dialog" data-edit-dialog><form method="dialog" data-edit-form><div class="dialog-heading"><div><span class="overline">Create a new version</span><h2>Edit CV text</h2></div><button class="icon-button" value="cancel" aria-label="Close">&times;</button></div><p class="dialog-lede">The original remains unchanged. Saving creates a new TXT version in your library.</p><input name="source_id" type="hidden"><label>New version label <input name="label" maxlength="100" required></label><label>CV content <textarea name="cv_text" maxlength="30000" rows="18" required></textarea></label><p class="form-error" data-edit-error></p><div class="dialog-actions"><button class="button button-secondary" value="cancel">Cancel</button><button class="button button-primary" type="submit" value="default">Save new version</button></div></form></dialog>
+
+  <template id="cv-card-template"><article class="cv-card"><div class="cv-card-heading"><span class="cv-file-mark">CV</span><span class="cv-version-date"></span></div><h3></h3><p class="cv-file-name"></p><p class="cv-lineage"></p><div class="cv-card-actions"><button type="button" data-review>Review CV</button><button type="button" data-edit>Edit as new version</button><a data-download>Download</a></div></article></template>
+  <script src="/static/cvs.js?v=1" defer></script>
+</body></html>

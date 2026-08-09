@@ -4,6 +4,8 @@ A spec-first reconstruction of the AI CV Advisory Board. The repository is inten
 
 The product has two access tiers: a no-login, session-only Gemini review backed by one shared monthly USD 5 hard cap, and an administrator-approved private workspace whose members have no in-app AI usage restriction. See [Spec 008](docs/specs/008-tiered-access.md).
 
+The private workspace now treats CVs as independent, versioned assets: members can review a CV without an application, edit extracted text into a new immutable version, and later compare an attached version against a tracked role. See [Spec 009](docs/specs/009-cv-library-and-navigation.md).
+
 ## Current vertical slice
 
 - Track applications in an interactive Interested → Applied → Interviewing → Offer → Closed pipeline.

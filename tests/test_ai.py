@@ -5,9 +5,11 @@ import pytest
 from advisory.ai import (
     BudgetedAiService,
     DeterministicAiReviewer,
+    DeterministicCvReviewer,
     EvidenceReview,
     GeminiAiReviewer,
     UnrestrictedAiService,
+    UnrestrictedCvService,
 )
 from advisory.budget import BudgetExceededError, InMemoryBudgetLedger, Pricing
 
@@ -117,3 +119,14 @@ def test_unrestricted_service_calls_reviewer_without_a_ledger() -> None:
             return expected, 20, 5
 
     assert UnrestrictedAiService(Reviewer()).review("member", "CV", "JOB") == expected
+
+
+def test_standalone_cv_reviewer_scores_structure_and_unrestricted_service() -> None:
+    reviewer = DeterministicCvReviewer()
+    review, input_tokens, output_tokens = reviewer.review(
+        "EXPERIENCE\nBuilt services for 50 teams\nSKILLS\nPython\nEDUCATION\nComputer Science"
+    )
+    assert review.quality_score >= 80
+    assert "Includes quantified evidence" in review.strengths
+    assert input_tokens == output_tokens == 0
+    assert UnrestrictedCvService(reviewer).review("member", "EXPERIENCE\nBuilt systems").summary

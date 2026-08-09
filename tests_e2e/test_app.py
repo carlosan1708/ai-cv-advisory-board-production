@@ -32,8 +32,33 @@ def test_home_presents_free_and_private_modes(page: Page) -> None:
     assert page.locator('link[rel="stylesheet"]').get_attribute("href") == "/static/app.css?v=8"
     assert page.evaluate("getComputedStyle(document.body).backgroundColor") == "rgb(244, 243, 239)"
     page.get_by_test_id("member-mode-button").click()
-    expect(page).to_have_url(f"{BASE_URL}/tracker")
-    expect(page.get_by_role("heading", name="Keep every opportunity moving.")).to_be_visible()
+    expect(page).to_have_url(f"{BASE_URL}/dashboard")
+    expect(page.get_by_role("heading", name="Your search, at a glance.")).to_be_visible()
+
+
+def test_cv_library_reviews_and_saves_a_new_version(page: Page, tmp_path: Path) -> None:
+    page.goto(f"{BASE_URL}/cvs")
+    label = f"Standalone CV {uuid4().hex[:6]}"
+    page.get_by_role("button", name="Upload a CV", exact=True).first.click()
+    upload_dialog = page.locator("[data-upload-dialog]")
+    upload_dialog.get_by_label("Version label").fill(label)
+    cv_path = tmp_path / "standalone-cv.txt"
+    cv_path.write_text(f"{CV_TEXT}\nDelivered systems for 50 teams", encoding="utf-8")
+    upload_dialog.get_by_label("CV file").set_input_files(str(cv_path))
+    page.get_by_role("button", name="Add to library").click()
+    card = page.locator(".cv-card").filter(has_text=label)
+    expect(card).to_be_visible()
+    card.get_by_role("button", name="Review CV").click()
+    expect(page.locator("[data-review-result]")).to_be_visible()
+    expect(page.locator("[data-review-score]")).not_to_have_text("0")
+    page.locator("[data-review-dialog]").get_by_role("button", name="Close").last.click()
+    card.get_by_role("button", name="Edit as new version").click()
+    page.locator("[data-edit-dialog]").get_by_label("New version label").fill(f"{label} revised")
+    page.locator("[data-edit-dialog]").get_by_label("CV content").fill(
+        f"{CV_TEXT}\nDelivered reliable systems for 100 teams"
+    )
+    page.get_by_role("button", name="Save new version").click()
+    expect(page.get_by_role("heading", name=f"{label} revised")).to_be_visible()
 
 
 def test_tracker_add_move_filter_and_funnel_update(page: Page) -> None:
@@ -56,16 +81,17 @@ def test_tracker_add_move_filter_and_funnel_update(page: Page) -> None:
 
 
 def test_tracker_uploads_and_attaches_exact_cv_version(page: Page, tmp_path: Path) -> None:
-    page.goto(f"{BASE_URL}/tracker")
+    page.goto(f"{BASE_URL}/cvs")
     version_label = f"AI platform · {uuid4().hex[:6]}"
-    page.get_by_role("button", name="CV library").click()
-    page.get_by_label("Version label").fill(version_label)
+    page.get_by_role("button", name="Upload a CV", exact=True).first.click()
+    upload_dialog = page.locator("[data-upload-dialog]")
+    upload_dialog.get_by_label("Version label").fill(version_label)
     cv_path = tmp_path / "platform-cv.txt"
     cv_path.write_text(CV_TEXT, encoding="utf-8")
-    page.get_by_label("CV file").set_input_files(str(cv_path))
-    page.get_by_role("button", name="Upload version").click()
-    expect(page.locator("[data-cv-library] strong").filter(has_text=version_label)).to_be_visible()
-    page.locator("[data-cv-dialog]").get_by_text("Close", exact=True).click()
+    upload_dialog.get_by_label("CV file").set_input_files(str(cv_path))
+    page.get_by_role("button", name="Add to library").click()
+    expect(page.get_by_role("heading", name=version_label)).to_be_visible()
+    page.goto(f"{BASE_URL}/tracker")
     page.get_by_role("button", name="Add application", exact=True).first.click()
     page.get_by_label("Company").fill("Northstar")
     page.get_by_label("Role").fill(f"ML Platform Lead {uuid4().hex[:6]}")

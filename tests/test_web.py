@@ -31,6 +31,15 @@ def test_tracker_page_has_board_funnel_and_fast_add() -> None:
     assert "data-application-dialog" in response.text
     assert "data-cv-dialog" in response.text
     assert "No in-app cap" in response.text
+    assert client.get("/dashboard").status_code == 200
+
+
+def test_cv_library_page_is_a_first_class_workspace() -> None:
+    response = client.get("/cvs")
+    assert response.status_code == 200
+    assert "Your CV library" in response.text
+    assert "Review CV" in response.text
+    assert "Edit as new version" in response.text
 
 
 def test_tracker_api_creates_moves_and_isolates_application() -> None:
@@ -86,6 +95,39 @@ def test_cv_version_upload_listing_download_and_attachment() -> None:
     )
     assert application.status_code == 201
     assert application.json()["cv_version_id"] == version["id"]
+
+
+def test_cv_can_be_reviewed_and_revised_without_an_application() -> None:
+    web.career_repository.clear()
+    headers = {"x-advisory-user": "cv-owner"}
+    original = client.post(
+        "/api/cv-versions",
+        headers=headers,
+        data={"label": "General CV"},
+        files={
+            "cv_file": (
+                "resume.txt",
+                b"EXPERIENCE\nBuilt Python systems\nSKILLS\nPython",
+                "text/plain",
+            )
+        },
+    ).json()
+    detail = client.get(f"/api/cv-versions/{original['id']}", headers=headers)
+    assert "Built Python systems" in detail.json()["extracted_text"]
+    review = client.post(f"/api/cv-versions/{original['id']}/ai-review", headers=headers)
+    assert review.status_code == 200
+    assert review.json()["review"]["quality_score"] > 0
+    revised = client.post(
+        f"/api/cv-versions/{original['id']}/revisions",
+        headers=headers,
+        data={
+            "label": "General CV revised",
+            "cv_text": "EXPERIENCE\nBuilt Python systems for 50 teams\nSKILLS\nPython",
+        },
+    )
+    assert revised.status_code == 201
+    assert revised.json()["parent_version_id"] == original["id"]
+    assert len(client.get("/api/cv-versions", headers=headers).json()) == 2
 
 
 def test_member_ai_is_unrestricted_and_free_pool_has_hard_limit() -> None:
