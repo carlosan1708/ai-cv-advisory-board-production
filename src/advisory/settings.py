@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     max_upload_bytes: int = Field(default=5 * 1024 * 1024, ge=1024, le=10 * 1024 * 1024)
     max_job_page_bytes: int = Field(default=1_000_000, ge=10_000, le=5_000_000)
     app_name: str = "AI CV Advisory Board"
+    public_origin: str = "https://ai-cv-advisory-board-production-142795288331.us-central1.run.app"
     repository_backend: Literal["memory", "firestore"] = "memory"
     auth_mode: Literal["development", "google"] = "development"
     google_oauth_client_id: str = ""

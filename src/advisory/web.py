@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Awaitable, Callable
 from pathlib import Path
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
@@ -50,6 +51,46 @@ from advisory.tracker_service import TrackerService
 BASE_DIR = Path(__file__).resolve().parent
 settings = get_settings()
 app = FastAPI(title=settings.app_name, version="0.1.0")
+
+
+def _expected_origin(request: Request) -> str:
+    if settings.environment == "production":
+        return settings.public_origin.rstrip("/")
+    return str(request.base_url).rstrip("/")
+
+
+@app.middleware("http")
+async def browser_security(
+    request: Request, call_next: Callable[[Request], Awaitable[Response]]
+) -> Response:
+    if request.method not in {"GET", "HEAD", "OPTIONS"}:
+        fetch_site = request.headers.get("sec-fetch-site", "").casefold()
+        origin = request.headers.get("origin", "").rstrip("/")
+        if fetch_site == "cross-site" or (origin and origin != _expected_origin(request)):
+            return JSONResponse(status_code=403, content={"detail": "Cross-site request blocked"})
+
+    response = await call_next(request)
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; "
+        "script-src 'self' https://accounts.google.com/gsi/client; "
+        "style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data: https://*.googleusercontent.com; "
+        "connect-src 'self' https://accounts.google.com/gsi/; "
+        "frame-src https://accounts.google.com/gsi/; "
+        "font-src 'self'; object-src 'none'; base-uri 'self'; "
+        "form-action 'self'; frame-ancestors 'none'"
+    )
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=(), payment=()"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    if settings.environment == "production":
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    if request.url.path.startswith("/api/") and not request.url.path.startswith("/api/health"):
+        response.headers["Cache-Control"] = "no-store"
+    return response
+
+
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 templates = Jinja2Templates(directory=BASE_DIR / "templates")
 identity_verifier = IdentityVerifier(settings.auth_mode, settings.google_oauth_client_id)
@@ -276,7 +317,13 @@ def session_login(payload: SessionCredential) -> JSONResponse:
 @app.post("/api/session/logout", status_code=204)
 def session_logout() -> Response:
     response = Response(status_code=204)
-    response.delete_cookie("advisory_session", path="/")
+    response.delete_cookie(
+        "advisory_session",
+        path="/",
+        secure=settings.environment == "production",
+        httponly=True,
+        samesite="lax",
+    )
     return response
 
 

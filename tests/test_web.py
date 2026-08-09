@@ -156,6 +156,33 @@ def test_login_creates_http_only_navigation_session_and_logout_clears_it() -> No
     assert "advisory_session=" in logout.headers["set-cookie"]
 
 
+def test_security_headers_and_private_api_cache_policy() -> None:
+    page = client.get("/")
+    assert "frame-ancestors 'none'" in page.headers["content-security-policy"]
+    assert page.headers["x-content-type-options"] == "nosniff"
+    assert page.headers["x-frame-options"] == "DENY"
+    assert "camera=()" in page.headers["permissions-policy"]
+    session = client.get("/api/session")
+    assert session.headers["cache-control"] == "no-store"
+
+
+def test_cross_site_mutations_are_blocked() -> None:
+    blocked = client.post(
+        "/api/session/login",
+        json={"credential": "development-token"},
+        headers={"origin": "https://attacker.example", "sec-fetch-site": "cross-site"},
+    )
+    assert blocked.status_code == 403
+    assert blocked.json() == {"detail": "Cross-site request blocked"}
+
+    allowed = client.post(
+        "/api/session/login",
+        json={"credential": "development-token"},
+        headers={"origin": "http://testserver", "sec-fetch-site": "same-origin"},
+    )
+    assert allowed.status_code == 200
+
+
 def test_non_admin_cannot_list_access_records() -> None:
     response = client.get(
         "/api/admin/access",

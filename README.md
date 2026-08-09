@@ -8,6 +8,8 @@ The private workspace now treats CVs as independent, versioned assets: members c
 
 The application dashboard now leads with a plain-language AI Expert Panel, while a verified HTTP-only session keeps members signed in across Dashboard, CV Library, and Access. See [Spec 010](docs/specs/010-expert-panel-and-session.md).
 
+Browser-facing security is enforced at the HTTP boundary with same-origin write checks, hardened session cookies, private-response cache controls, CSP, HSTS, and related response protections. See [Spec 011](docs/specs/011-browser-security-guardrails.md).
+
 ## Current vertical slice
 
 - Track applications in an interactive Interested → Applied → Interviewing → Offer → Closed pipeline.
@@ -41,9 +43,10 @@ is presented as a simulation of a commercial ATS.
 8. [Tiered access specification](docs/specs/008-tiered-access.md)
 9. [CV library and navigation specification](docs/specs/009-cv-library-and-navigation.md)
 10. [Expert panel and persistent session specification](docs/specs/010-expert-panel-and-session.md)
-11. [Threat model](docs/THREAT_MODEL.md)
-12. [Operations and observability](docs/OPERATIONS.md)
-13. [ADR 001: deterministic baseline first](docs/adr/001-deterministic-baseline.md)
+11. [Browser security guardrails](docs/specs/011-browser-security-guardrails.md)
+12. [Threat model](docs/THREAT_MODEL.md)
+13. [Operations and observability](docs/OPERATIONS.md)
+14. [ADR 001: deterministic baseline first](docs/adr/001-deterministic-baseline.md)
 
 ## Local setup
 
