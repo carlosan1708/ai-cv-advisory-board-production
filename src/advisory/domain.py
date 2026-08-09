@@ -9,7 +9,23 @@ from pydantic import BaseModel, Field
 WORD_RE = re.compile(r"[a-zA-Z][a-zA-Z0-9+#.\-/]{1,}")
 STOPWORDS = frozenset(
     "a an and are as at be by for from has have in is it of on or our that the this to we will with you "
-    "your".split()
+    "your candidate candidates engineering engineer engineers experience experienced job looking need needs "
+    "preferred required requirement requirements role senior strong team teams work working years".split()
+)
+CURATED_PHRASES = (
+    "artificial intelligence",
+    "automated testing",
+    "computer vision",
+    "continuous delivery",
+    "continuous integration",
+    "data engineering",
+    "distributed systems",
+    "generative ai",
+    "google cloud",
+    "machine learning",
+    "natural language processing",
+    "project management",
+    "software architecture",
 )
 SECTIONS = {
     "experience": ("experience", "employment", "work history"),
@@ -52,13 +68,21 @@ class MatchPolicy:
         return [token.lower().strip(".-/") for token in WORD_RE.findall(text)]
 
     def extract_requirements(self, job_text: str) -> list[str]:
+        job_lower = job_text.lower()
         counts: dict[str, int] = {}
         first_index: dict[str, int] = {}
-        for index, token in enumerate(self.tokens(job_text)):
-            if len(token) < 3 or token in STOPWORDS:
+
+        detected_phrases = [phrase for phrase in CURATED_PHRASES if phrase in job_lower]
+        phrase_tokens = {token for phrase in detected_phrases for token in phrase.split()}
+        for phrase in detected_phrases:
+            counts[phrase] = job_lower.count(phrase)
+            first_index[phrase] = job_lower.index(phrase)
+
+        for token in self.tokens(job_text):
+            if len(token) < 3 or token in STOPWORDS or token in phrase_tokens:
                 continue
             counts[token] = counts.get(token, 0) + 1
-            first_index.setdefault(token, index)
+            first_index.setdefault(token, job_lower.find(token))
         ranked = sorted(counts, key=lambda token: (-counts[token], first_index[token], token))
         return ranked[: self.max_requirements]
 

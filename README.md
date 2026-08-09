@@ -19,8 +19,9 @@ The deterministic engine is deliberate: it establishes a measurable baseline bef
 2. [Architecture specification](docs/specs/002-architecture.md)
 3. [Quality and evaluation specification](docs/specs/003-quality-evaluation.md)
 4. [Advisory workspace interface specification](docs/specs/004-interface-redesign.md)
-5. [Threat model](docs/THREAT_MODEL.md)
-6. [ADR 001: deterministic baseline first](docs/adr/001-deterministic-baseline.md)
+5. [Product interface recovery specification](docs/specs/005-product-interface-recovery.md)
+6. [Threat model](docs/THREAT_MODEL.md)
+7. [ADR 001: deterministic baseline first](docs/adr/001-deterministic-baseline.md)
 
 ## Local setup
 

@@ -3,90 +3,204 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Review workspace · AI CV Advisory Board</title>
-  <meta name="description" content="Evidence-based CV review for a specific role.">
+  <title>Review workspace | AI CV Advisory Board</title>
+  <meta name="description" content="Build an evidence-led CV review for a specific role.">
   <link rel="stylesheet" href="/static/app.css">
   <script src="/static/app.js" defer></script>
 </head>
 <body class="workspace-page{% if assessment %} has-results{% endif %}{% if error %} has-error{% endif %}">
-  <header class="site-header workspace-header">
-    <a class="wordmark" href="/" aria-label="AI CV Advisory Board home">
-      <span class="wordmark-symbol" aria-hidden="true"><i></i><i></i><i></i></span>
-      <span>AI CV Advisory Board</span>
+  <header class="app-header workspace-header">
+    <a class="brand" href="/" aria-label="AI CV Advisory Board home">
+      <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>
+      <span class="brand-copy"><strong>AI CV</strong><small>Advisory Board</small></span>
     </a>
-    <div class="workspace-meta"><span><i></i> Private session</span><a href="/">Exit review</a></div>
+    <div class="workspace-header-meta">
+      <span class="privacy-status"><i aria-hidden="true"></i> Session-only processing</span>
+      <a href="/">Exit review</a>
+    </div>
   </header>
 
-  <main class="workspace-main">
-    <nav class="stepper" aria-label="Review progress">
-      <div class="step {% if not assessment %}active{% else %}complete{% endif %}" data-step-indicator="1"><span>1</span><div><strong>Your CV</strong><small>Candidate evidence</small></div></div>
-      <div class="step {% if assessment %}complete{% endif %}" data-step-indicator="2"><span>2</span><div><strong>Target role</strong><small>Role requirements</small></div></div>
-      <div class="step {% if assessment %}complete{% endif %}" data-step-indicator="3"><span>3</span><div><strong>Board review</strong><small>Evidence analysis</small></div></div>
-      <div class="step {% if assessment %}active{% endif %}" data-step-indicator="4"><span>4</span><div><strong>Findings</strong><small>Actions & gaps</small></div></div>
+  <main class="workspace-shell">
+    {% if assessment %}
+    <div class="workspace-title results-title-block">
+      <div><span class="overline">Board findings</span><h1>Your evidence map is ready.</h1><p>Start with the decision summary, then inspect the evidence behind it.</p></div>
+      <a class="button button-secondary" href="/workspace">Start another review</a>
+    </div>
+    {% else %}
+    <div class="workspace-title">
+      <span class="overline">Guided board review</span>
+      <h1>Build a defensible case for this role.</h1>
+      <p>Two inputs in. Traceable findings out. Your text is processed for this response and is not persisted.</p>
+    </div>
+    {% endif %}
+
+    <nav class="progress-rail" aria-label="Review progress">
+      <div class="progress-step {% if not assessment %}active{% else %}complete{% endif %}" data-step-indicator="1">
+        <span class="progress-marker">1</span><div><strong>Evidence</strong><small>Your CV content</small></div>
+      </div>
+      <div class="progress-step {% if assessment %}complete{% endif %}" data-step-indicator="2">
+        <span class="progress-marker">2</span><div><strong>Target</strong><small>The role brief</small></div>
+      </div>
+      <div class="progress-step {% if assessment %}active{% endif %}" data-step-indicator="3">
+        <span class="progress-marker">3</span><div><strong>Findings</strong><small>Board review</small></div>
+      </div>
     </nav>
 
-    {% if error %}<div class="alert" role="alert"><strong>Review the inputs</strong><span>{{ error }}</span></div>{% endif %}
-
-    <form method="post" action="/analyze" class="guided-form" data-testid="guided-form">
-      <section class="review-step {% if not assessment and not error %}visible{% endif %}" data-step-panel="1" aria-labelledby="cv-step-title">
-        <div class="step-heading"><span class="eyebrow">Step 1 of 3</span><h1 id="cv-step-title">Start with your CV.</h1><p>Paste the content you want the board to assess. Keep accomplishments, dates, and skills intact so every finding can link back to evidence.</p></div>
-        <div class="single-field">
-          <label for="cv-text">CV content <span>Required</span></label>
-          <textarea id="cv-text" name="cv_text" data-testid="cv-input" required maxlength="30000" placeholder="Paste your CV text here...">{{ cv_text }}</textarea>
-          <div class="field-note"><span>Plain text · Maximum 30,000 characters</span><span><i>✓</i> Processed in memory</span></div>
-        </div>
-        <div class="step-actions"><a class="text-link" href="/">← Back to overview</a><button class="button button-dark" type="button" data-next-step="2">Continue to target role <span>→</span></button></div>
-      </section>
-
-      <section class="review-step {% if error %}visible{% endif %}" data-step-panel="2" aria-labelledby="job-step-title">
-        <div class="step-heading"><span class="eyebrow">Step 2 of 3</span><h1 id="job-step-title">What role are you targeting?</h1><p>Use the full job description. Responsibilities, qualifications, and seniority signals all help the board understand what the employer values.</p></div>
-        <div class="single-field">
-          <label for="job-text">Job description <span>Required</span></label>
-          <textarea id="job-text" name="job_text" data-testid="job-input" required maxlength="30000" placeholder="Paste the complete job description here...">{{ job_text }}</textarea>
-          <div class="field-note"><span>Role requirements · Maximum 30,000 characters</span><span><i>✓</i> Nothing persisted</span></div>
-        </div>
-        <div class="step-actions"><button class="text-link as-button" type="button" data-previous-step="1">← Back to CV</button><button class="button button-dark" type="submit" data-testid="analyze-button">Convene the advisory board <span>→</span></button></div>
-      </section>
-    </form>
+    {% if error %}
+    <div class="form-alert" role="alert"><span aria-hidden="true">!</span><div><strong>Review the input</strong><p>{{ error }}</p></div></div>
+    {% endif %}
 
     {% if not assessment %}
-    <aside class="sample-prompt"><div><span class="sample-symbol">◇</span><div><strong>Want to see the complete experience first?</strong><p>Run a review with a synthetic CV and job description.</p></div></div><form method="post" action="/demo"><button type="submit" class="button button-quiet" data-testid="workspace-demo-button">Open sample review</button></form></aside>
+    <div class="review-layout">
+      <form method="post" action="/analyze" class="review-form" data-testid="guided-form">
+        <section class="review-panel {% if not error %}visible{% endif %}" data-step-panel="1" aria-labelledby="cv-step-title">
+          <div class="panel-heading">
+            <span class="stage-label">Stage 1 of 2</span>
+            <h2 id="cv-step-title" tabindex="-1">Add the evidence you want challenged.</h2>
+            <p>Paste the complete CV text. Keep dates, outcomes, technologies, and section headings intact so findings can point to specific evidence.</p>
+          </div>
+          <div class="field-card">
+            <div class="field-heading"><label for="cv-text">CV content</label><span>Required</span></div>
+            <textarea id="cv-text" name="cv_text" data-testid="cv-input" required maxlength="30000" placeholder="Paste your CV text here...">{{ cv_text }}</textarea>
+            <div class="field-meta"><span><strong data-char-count="cv-text">0</strong> / 30,000 characters</span><span>Processed in memory</span></div>
+          </div>
+          <div class="panel-actions">
+            <a class="text-action" href="/">&larr; Back to overview</a>
+            <button class="button button-primary" type="button" data-next-step="2">Continue to target <span aria-hidden="true">&rarr;</span></button>
+          </div>
+        </section>
+
+        <section class="review-panel {% if error %}visible{% endif %}" data-step-panel="2" aria-labelledby="job-step-title">
+          <div class="panel-heading">
+            <span class="stage-label">Stage 2 of 2</span>
+            <h2 id="job-step-title" tabindex="-1">Define the decision your CV must support.</h2>
+            <p>Paste the full role description. Responsibilities, qualifications, and seniority language all help the board identify what matters.</p>
+          </div>
+          <div class="field-card">
+            <div class="field-heading"><label for="job-text">Job description</label><span>Required</span></div>
+            <textarea id="job-text" name="job_text" data-testid="job-input" required maxlength="30000" placeholder="Paste the complete job description here...">{{ job_text }}</textarea>
+            <div class="field-meta"><span><strong data-char-count="job-text">0</strong> / 30,000 characters</span><span>Nothing persisted</span></div>
+          </div>
+          <div class="panel-actions">
+            <button class="text-action as-button" type="button" data-previous-step="1">&larr; Back to evidence</button>
+            <button class="button button-primary" type="submit" data-testid="analyze-button">Run board review <span aria-hidden="true">&rarr;</span></button>
+          </div>
+        </section>
+      </form>
+
+      <aside class="review-brief" aria-label="Review brief">
+        <div class="brief-top"><span class="overline">Your board</span><span class="baseline-badge">Baseline 1.0</span></div>
+        <h2>Three lenses, one evidence contract.</h2>
+        <div class="brief-advisors">
+          <div><span class="advisor-avatar">TR</span><p><strong>Technical Recruiter</strong><small>Requirement coverage and positioning</small></p></div>
+          <div><span class="advisor-avatar">HM</span><p><strong>Hiring Manager</strong><small>Structure, seniority, and impact signals</small></p></div>
+          <div><span class="advisor-avatar">TE</span><p><strong>Technical Reviewer</strong><small>Specific, traceable technical evidence</small></p></div>
+        </div>
+        <div class="brief-rule"><span aria-hidden="true">!</span><p><strong>Truthfulness rule</strong><small>The board identifies missing evidence. It never turns a gap into a candidate claim.</small></p></div>
+        <form method="post" action="/demo">
+          <button type="submit" class="button button-secondary button-full" data-testid="workspace-demo-button">Use synthetic sample</button>
+        </form>
+      </aside>
+    </div>
     {% endif %}
 
     {% if assessment %}
-    <section class="results visible" aria-labelledby="results-title" data-testid="results">
-      <div class="results-intro"><div><span class="eyebrow">Board findings</span><h1 id="results-title">Your evidence map is ready.</h1><p>Start with the strength of the match, then inspect the evidence and gaps behind it.</p></div><a class="button button-quiet" href="/workspace">Start another review</a></div>
-
-      <div class="score-overview">
-        <div class="score-block"><span class="score-label">Role alignment</span><div><strong data-testid="score">{{ assessment.score }}</strong><span>/100</span></div><span class="alignment-label">{{ assessment.band }} alignment</span></div>
-        <div class="score-narrative"><h2>Your CV supports most of this role’s core requirements.</h2><p data-testid="score-disclaimer">{{ assessment.warnings[0] }}</p><span class="run-id">Run {{ run_id[:8] }} · {{ assessment.scoring_version }}</span></div>
-        <div class="score-breakdown">
-          <div><span>Requirement coverage</span><strong>{{ assessment.components.requirement_coverage }}<small>/70</small></strong></div>
-          <div><span>Document structure</span><strong>{{ assessment.components.document_structure }}<small>/20</small></strong></div>
-          <div><span>Evidence density</span><strong>{{ assessment.components.evidence_density }}<small>/10</small></strong></div>
+    {% set matched = assessment.requirements | selectattr('matched') | list %}
+    {% set missing = assessment.requirements | rejectattr('matched') | list %}
+    <section class="results" aria-labelledby="decision-title" data-testid="results">
+      <div class="decision-card" aria-describedby="score-disclaimer">
+        <div class="result-score">
+          <span>Role alignment</span>
+          <div><strong data-testid="score">{{ assessment.score }}</strong><small>/100</small></div>
+          <span class="band-badge band-{{ assessment.band }}">{{ assessment.band }} match</span>
+        </div>
+        <div class="decision-copy">
+          <span class="overline">Decision summary</span>
+          {% if assessment.band == 'strong' %}
+          <h2 id="decision-title">Your CV makes a credible case for this role.</h2>
+          <p>{{ matched | length }} of {{ assessment.requirements | length }} priority requirements have direct support. Use the evidence ledger to strengthen the remaining gaps.</p>
+          {% elif assessment.band == 'partial' %}
+          <h2 id="decision-title">The fit is promising, but the evidence is uneven.</h2>
+          <p>{{ matched | length }} of {{ assessment.requirements | length }} priority requirements have direct support. Address the highest-value gaps before tailoring the application.</p>
+          {% else %}
+          <h2 id="decision-title">This role asks for evidence the CV does not yet show.</h2>
+          <p>{{ matched | length }} of {{ assessment.requirements | length }} priority requirements have direct support. Treat missing evidence as a decision point, not permission to invent experience.</p>
+          {% endif %}
+          <p class="score-disclaimer" id="score-disclaimer" data-testid="score-disclaimer"><span aria-hidden="true">i</span>{{ assessment.warnings[0] }}</p>
+          <span class="run-meta">Run {{ run_id[:8] }} &middot; {{ assessment.scoring_version }} &middot; Schema {{ assessment.schema_version }}</span>
+        </div>
+        <div class="decision-facts" aria-label="Finding totals">
+          <div><strong>{{ matched | length }}</strong><span>Requirements supported</span></div>
+          <div><strong>{{ missing | length }}</strong><span>Evidence gaps</span></div>
         </div>
       </div>
 
-      <div class="finding-grid">
-        <article class="finding-card">
-          <div class="finding-heading"><span class="finding-mark positive">✓</span><div><h2>Evidence the board found</h2><p>Requirements supported by specific CV content.</p></div></div>
-          <div class="finding-list">
-            {% for requirement in assessment.requirements if requirement.matched %}<div class="finding"><strong>{{ requirement.term }}</strong><p>{{ requirement.evidence[0] }}</p></div>{% else %}<p>No direct evidence detected.</p>{% endfor %}
+      <section class="lens-section" aria-labelledby="lens-title">
+        <div class="result-section-heading"><div><span class="overline">Advisor lenses</span><h2 id="lens-title">How the board reached the finding</h2></div><p>Each lens maps to a documented scoring component.</p></div>
+        <div class="lens-grid">
+          <article class="lens-card">
+            <div class="lens-top"><span class="advisor-avatar">TR</span><span>{{ assessment.components.requirement_coverage }} / 70</span></div>
+            <h3>Technical Recruiter</h3><p>Checks whether priority role language is supported by direct CV evidence.</p>
+            <div class="metric-track"><i style="width: {{ assessment.components.requirement_coverage / 70 * 100 }}%"></i></div>
+            <small>Requirement coverage</small>
+          </article>
+          <article class="lens-card">
+            <div class="lens-top"><span class="advisor-avatar">HM</span><span>{{ assessment.components.document_structure }} / 20</span></div>
+            <h3>Hiring Manager</h3><p>Checks whether experience, skills, and education are structured for a fast decision.</p>
+            <div class="metric-track"><i style="width: {{ assessment.components.document_structure / 20 * 100 }}%"></i></div>
+            <small>Document structure</small>
+          </article>
+          <article class="lens-card">
+            <div class="lens-top"><span class="advisor-avatar">TE</span><span>{{ assessment.components.evidence_density }} / 10</span></div>
+            <h3>Technical Reviewer</h3><p>Checks the density of specific CV lines supporting matched technical requirements.</p>
+            <div class="metric-track"><i style="width: {{ assessment.components.evidence_density / 10 * 100 }}%"></i></div>
+            <small>Evidence density</small>
+          </article>
+        </div>
+      </section>
+
+      <div class="findings-layout">
+        <section class="evidence-ledger" aria-labelledby="ledger-title">
+          <div class="result-section-heading compact"><div><span class="overline">Evidence ledger</span><h2 id="ledger-title">Requirement by requirement</h2></div><span>{{ assessment.requirements | length }} reviewed</span></div>
+          <div class="evidence-list">
+            {% for requirement in assessment.requirements %}
+            <article class="evidence-row {% if requirement.matched %}is-supported{% else %}is-missing{% endif %}">
+              <div class="evidence-status" aria-label="{% if requirement.matched %}Supported{% else %}Missing evidence{% endif %}"><span aria-hidden="true">{% if requirement.matched %}&check;{% else %}&minus;{% endif %}</span></div>
+              <div><div class="requirement-heading"><h3>{{ requirement.term }}</h3><span>{% if requirement.matched %}Supported{% else %}Missing evidence{% endif %}</span></div>
+              {% if requirement.matched %}<p>&ldquo;{{ requirement.evidence[0] }}&rdquo;</p>{% else %}<p>No direct CV line was found for this priority requirement.</p>{% endif %}</div>
+            </article>
+            {% endfor %}
           </div>
-        </article>
-        <article class="finding-card" data-testid="evidence-gaps">
-          <div class="finding-heading"><span class="finding-mark gap-mark">!</span><div><h2>Gaps worth addressing</h2><p>Add evidence only when it is true and defensible.</p></div></div>
-          <div class="finding-list gap-list">
-            {% for recommendation in assessment.recommendations %}<div class="finding"><p>{{ recommendation }}</p></div>{% else %}<p>No high-priority gaps detected.</p>{% endfor %}
-          </div>
-        </article>
+        </section>
+
+        <aside class="action-panel" aria-labelledby="actions-title" data-testid="evidence-gaps">
+          <span class="overline">Truthful next actions</span>
+          <h2 id="actions-title">Close the case, not just the keyword gap.</h2>
+          <p>Only add evidence you can defend in an interview.</p>
+          <ol>
+            {% for recommendation in assessment.recommendations %}
+            <li><span>{{ loop.index }}</span><p>{{ recommendation }}</p></li>
+            {% else %}
+            <li><span>&check;</span><p>No high-priority evidence gaps were detected. Improve specificity and measurable impact next.</p></li>
+            {% endfor %}
+          </ol>
+          <div class="truth-note"><span aria-hidden="true">!</span><p>{{ assessment.warnings[1] }}</p></div>
+        </aside>
       </div>
 
-      <details class="structured-result"><summary>View structured assessment <span>JSON · Schema {{ assessment.schema_version }}</span></summary><pre data-testid="json-result">{{ assessment_json }}</pre></details>
+      <details class="structured-result">
+        <summary><span><strong>Structured assessment</strong><small>JSON &middot; Schema {{ assessment.schema_version }}</small></span><span aria-hidden="true">+</span></summary>
+        <div class="structured-toolbar"><span>Machine-readable regression artifact</span><button class="button button-secondary button-small" type="button" data-download-json="assessment.json" data-testid="download-json-button">Download JSON</button></div>
+        <pre data-testid="json-result">{{ assessment_json }}</pre>
+      </details>
     </section>
     {% endif %}
   </main>
 
-  <footer class="site-footer workspace-footer"><span>AI CV Advisory Board</span><span>Evidence-linked · No fabricated claims · Nothing persisted</span><span>Baseline 1.0</span></footer>
+  <footer class="app-footer workspace-footer">
+    <span>AI CV Advisory Board</span>
+    <span>Evidence-linked &middot; No fabricated claims &middot; No persistence</span>
+    <span>Baseline 1.0</span>
+  </footer>
 </body>
 </html>

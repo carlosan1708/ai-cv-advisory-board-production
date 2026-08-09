@@ -18,8 +18,15 @@ def test_repeated_job_terms_rank_first() -> None:
     assert terms == ["python", "cloud"]
 
 
+def test_requirement_extraction_prefers_meaningful_phrases() -> None:
+    terms = MatchPolicy().extract_requirements(
+        "We need a senior engineer with Google Cloud, machine learning, Python, and Terraform experience."
+    )
+    assert terms[:4] == ["google cloud", "machine learning", "python", "terraform"]
+    assert not {"need", "senior", "engineer", "experience"}.intersection(terms)
+
+
 def test_empty_job_is_safe() -> None:
     result = MatchPolicy().assess("EXPERIENCE", "")
     assert result.score <= 20
     assert result.band == "weak"
-

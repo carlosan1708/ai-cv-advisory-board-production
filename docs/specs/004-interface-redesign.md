@@ -1,6 +1,6 @@
 # Spec 004 — Welcome and guided advisory review
 
-Status: Implemented
+Status: Superseded by Spec 005
 
 ## Context
 
