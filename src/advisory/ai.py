@@ -88,7 +88,7 @@ class BudgetedAiService:
         ledger: BudgetLedger,
         *,
         pricing: Pricing | None = None,
-        max_input_tokens: int = 20_000,
+        max_input_tokens: int = 65_000,
         max_output_tokens: int = 1_024,
     ) -> None:
         self.reviewer = reviewer
