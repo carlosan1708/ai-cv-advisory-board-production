@@ -58,6 +58,7 @@ There is no fictional fourth interactive step. The board review happens during t
 - Submitting a valid role produces findings on the same request.
 - The synthetic review remains available from Welcome and Workspace.
 - Findings provide both a new-review action and a JSON download.
+- Static CSS and JavaScript URLs carry an explicit interface version so a new HTML revision cannot reuse an incompatible cached asset.
 - Focus moves to the new stage heading when the user advances or returns.
 - Motion respects `prefers-reduced-motion`.
 
@@ -85,4 +86,3 @@ There is no fictional fourth interactive step. The board review happens during t
 - Playwright covers Welcome, sample findings, custom findings, validation, backward navigation, character counts, JSON download, mobile overflow, and browser console cleanliness.
 - The production regression repeats the primary demo and custom-review flows against the deployed Cloud Run URL.
 - The final deployed revision must return HTTP 200 for `/` and `/healthz`.
-

@@ -15,7 +15,7 @@ def test_home_is_product_first_and_opens_workspace(page: Page) -> None:
     expect(page.get_by_text("Technical Recruiter").first).to_be_visible()
     expect(page.get_by_text("Hiring Manager").first).to_be_visible()
     expect(page.get_by_text("Technical Reviewer").first).to_be_visible()
-    assert page.locator('link[rel="stylesheet"]').get_attribute("href") == "/static/app.css"
+    assert page.locator('link[rel="stylesheet"]').get_attribute("href") == "/static/app.css?v=5"
     assert page.evaluate("getComputedStyle(document.body).backgroundColor") == "rgb(247, 248, 250)"
     assert "Georgia" not in page.evaluate("getComputedStyle(document.body).fontFamily")
     page.get_by_test_id("get-started-button").click()

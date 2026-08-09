@@ -15,7 +15,7 @@ def test_home_explains_product_and_board() -> None:
     assert "Your CV should make its case before you enter the interview" in response.text
     assert "Technical Recruiter" in response.text
     assert "Evidence ledger" in response.text
-    assert 'href="/static/app.css"' in response.text
+    assert 'href="/static/app.css?v=5"' in response.text
 
 
 def test_workspace_starts_three_stage_review() -> None:
@@ -25,7 +25,7 @@ def test_workspace_starts_three_stage_review() -> None:
     assert "Evidence" in response.text
     assert "Target" in response.text
     assert "Findings" in response.text
-    assert 'src="/static/app.js"' in response.text
+    assert 'src="/static/app.js?v=5"' in response.text
 
 
 def test_stylesheet_is_served_as_css() -> None:
