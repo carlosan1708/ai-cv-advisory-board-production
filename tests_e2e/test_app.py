@@ -1,6 +1,7 @@
 import json
 import os
 from pathlib import Path
+from uuid import uuid4
 
 from playwright.sync_api import ConsoleMessage, Page, expect
 
@@ -20,19 +21,57 @@ def open_job_step(page: Page, tmp_path: Path) -> None:
     page.get_by_role("button", name="Continue to job").click()
 
 
-def test_home_is_quiet_document_first_and_opens_workspace(page: Page) -> None:
+def test_home_is_quiet_pipeline_first_and_opens_tracker(page: Page) -> None:
     page.set_viewport_size({"width": 1440, "height": 900})
     page.goto(BASE_URL)
-    expect(page.get_by_role("heading", name="Put your CV in front of the board.")).to_be_visible()
-    expect(page.get_by_role("heading", name="Upload your CV")).to_be_visible()
-    expect(page.get_by_role("heading", name="Add the job link")).to_be_visible()
-    expect(page.get_by_role("heading", name="Read the findings")).to_be_visible()
-    assert page.locator('link[rel="stylesheet"]').get_attribute("href") == "/static/app.css?v=6"
+    expect(page.get_by_role("heading", name="Turn applications into momentum.")).to_be_visible()
+    expect(page.get_by_role("heading", name="Capture the role")).to_be_visible()
+    expect(page.get_by_role("heading", name="Attach what you sent")).to_be_visible()
+    expect(page.get_by_role("heading", name="Move the next step")).to_be_visible()
+    assert page.locator('link[rel="stylesheet"]').get_attribute("href") == "/static/app.css?v=7"
     assert page.evaluate("getComputedStyle(document.body).backgroundColor") == "rgb(247, 247, 244)"
     assert page.evaluate("document.documentElement.scrollHeight <= window.innerHeight + 1") is True
     page.get_by_test_id("get-started-button").click()
-    expect(page).to_have_url(f"{BASE_URL}/workspace")
-    expect(page.get_by_role("heading", name="Review your CV against a real job.")).to_be_visible()
+    expect(page).to_have_url(f"{BASE_URL}/tracker")
+    expect(page.get_by_role("heading", name="Keep every opportunity moving.")).to_be_visible()
+
+
+def test_tracker_add_move_filter_and_funnel_update(page: Page) -> None:
+    page.goto(f"{BASE_URL}/tracker")
+    role = f"Staff AI Engineer {uuid4().hex[:6]}"
+    applied_before = int(page.locator('[data-count="applied"]').text_content())
+    interviewing_before = int(page.locator('[data-count="interviewing"]').text_content())
+    page.get_by_role("button", name="Add application", exact=True).first.click()
+    page.get_by_label("Company").fill("Acme")
+    page.get_by_label("Role").fill(role)
+    page.get_by_label("Status").select_option("applied")
+    page.get_by_role("button", name="Add application", exact=True).last.click()
+    expect(page.get_by_role("heading", name=role)).to_be_visible()
+    expect(page.locator('[data-count="applied"]')).to_have_text(str(applied_before + 1))
+    page.get_by_label(f"Move {role} at Acme").select_option("interviewing")
+    expect(page.locator('[data-count="applied"]')).to_have_text(str(applied_before))
+    expect(page.locator('[data-count="interviewing"]')).to_have_text(str(interviewing_before + 1))
+    page.locator('[data-filter="interviewing"]').click()
+    expect(page.get_by_role("heading", name=role)).to_be_visible()
+
+
+def test_tracker_uploads_and_attaches_exact_cv_version(page: Page, tmp_path: Path) -> None:
+    page.goto(f"{BASE_URL}/tracker")
+    version_label = f"AI platform · {uuid4().hex[:6]}"
+    page.get_by_role("button", name="CV library").click()
+    page.get_by_label("Version label").fill(version_label)
+    cv_path = tmp_path / "platform-cv.txt"
+    cv_path.write_text(CV_TEXT, encoding="utf-8")
+    page.get_by_label("CV file").set_input_files(str(cv_path))
+    page.get_by_role("button", name="Upload version").click()
+    expect(page.locator("[data-cv-library] strong").filter(has_text=version_label)).to_be_visible()
+    page.locator("[data-cv-dialog]").get_by_text("Close", exact=True).click()
+    page.get_by_role("button", name="Add application", exact=True).first.click()
+    page.get_by_label("Company").fill("Northstar")
+    page.get_by_label("Role").fill(f"ML Platform Lead {uuid4().hex[:6]}")
+    page.get_by_label("CV version").select_option(label=version_label)
+    page.get_by_role("button", name="Add application", exact=True).last.click()
+    expect(page.get_by_text(f"CV · {version_label}")).to_be_visible()
 
 
 def test_cv_upload_is_primary_and_text_is_a_collapsed_fallback(page: Page, tmp_path: Path) -> None:
@@ -119,8 +158,8 @@ def test_pasted_cv_fallback_still_completes_review(page: Page) -> None:
 
 
 def test_synthetic_demo_renders_and_downloads_valid_json(page: Page) -> None:
-    page.goto(BASE_URL)
-    page.get_by_test_id("demo-button").click()
+    page.goto(f"{BASE_URL}/workspace")
+    page.get_by_test_id("workspace-demo-button").click()
     expect(page.get_by_test_id("results")).to_be_visible()
     expect(page.get_by_test_id("score")).not_to_have_text("0")
     expect(page.get_by_test_id("score-disclaimer")).to_contain_text("commercial ATS")
@@ -145,6 +184,8 @@ def test_mobile_pages_have_no_horizontal_overflow(page: Page) -> None:
     page.get_by_test_id("workspace-demo-button").click()
     expect(page.get_by_test_id("results")).to_be_visible()
     assert page.evaluate(overflow) is False
+    page.goto(f"{BASE_URL}/tracker")
+    assert page.evaluate(overflow) is False
 
 
 def test_primary_flows_have_clean_browser_console(page: Page, tmp_path: Path) -> None:
@@ -156,7 +197,7 @@ def test_primary_flows_have_clean_browser_console(page: Page, tmp_path: Path) ->
 
     page.on("console", collect_console_message)
     page.goto(BASE_URL)
-    page.get_by_test_id("get-started-button").click()
+    page.get_by_test_id("review-button").click()
     upload_text_cv(page, tmp_path)
     page.get_by_role("button", name="Continue to job").click()
     page.get_by_text("Paste the job description instead", exact=False).click()

@@ -5,6 +5,9 @@ description = "Spec-first, production-grade AI CV advisory platform"
 requires-python = ">=3.11"
 dependencies = [
   "fastapi==0.115.8",
+  "google-cloud-firestore==2.28.1",
+  "google-cloud-storage==3.13.1",
+  "google-genai==2.17.0",
   "httpx==0.28.1",
   "jinja2==3.1.5",
   "pydantic-settings==2.7.1",
@@ -27,6 +30,9 @@ dev = [
 testpaths = ["tests"]
 pythonpath = ["."]
 addopts = "--strict-markers --cov=src/advisory --cov-report=term-missing --cov-fail-under=85"
+
+[tool.coverage.run]
+omit = ["src/advisory/google_persistence.py"]
 
 [tool.ruff]
 line-length = 110

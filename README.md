@@ -4,16 +4,24 @@ A spec-first reconstruction of the AI CV Advisory Board. The repository is inten
 
 ## Current vertical slice
 
+- Track applications in an interactive Interested → Applied → Interviewing → Offer → Closed pipeline.
+- Filter with a live application funnel and move cards with drag-and-drop or an accessible status control.
+- Upload immutable CV versions and attach the exact version sent to each application.
+- Record job links, next actions, and notes without requiring AI.
 - Upload a PDF/TXT CV or use a deliberate text fallback.
 - Add a public HTTPS job posting or paste the description when the page cannot be read.
 - Receive a deterministic, explainable CV–job match assessment.
 - See matched requirements, evidence gaps, and safe recommendations.
 - Use a synthetic demo without an API key.
 - Export a JSON result carrying schema and scoring versions.
-- Run unit, integration, evaluation, and Playwright browser tests without paid services.
+- Use Gemini 3.5 Flash-Lite for bounded structured evidence reviews in production.
+- Enforce a configurable $5 monthly per-user AI cap using atomic pre-call reservations.
+- Run unit, security, integration, evaluation, and Playwright browser tests without paid services.
 - Recover from file parsing and job-page failures without re-entering the entire review.
 
-The deterministic engine is deliberate: it establishes a measurable baseline before adding Gemini behind a typed adapter. No score is presented as a simulation of a commercial ATS.
+The deterministic engine remains the offline baseline. Production Gemini calls sit behind the same typed contract,
+strict JSON schema, minimal thinking, a 1,024-token output ceiling, and a durable Firestore cost ledger. No score
+is presented as a simulation of a commercial ATS.
 
 ## Engineering trail
 
@@ -23,9 +31,10 @@ The deterministic engine is deliberate: it establishes a measurable baseline bef
 4. [Advisory workspace interface specification](docs/specs/004-interface-redesign.md)
 5. [Product interface recovery specification](docs/specs/005-product-interface-recovery.md)
 6. [Document-first review specification](docs/specs/006-document-first-review.md)
-7. [Threat model](docs/THREAT_MODEL.md)
-8. [Operations and observability](docs/OPERATIONS.md)
-9. [ADR 001: deterministic baseline first](docs/adr/001-deterministic-baseline.md)
+7. [Career pipeline specification](docs/specs/007-career-pipeline.md)
+8. [Threat model](docs/THREAT_MODEL.md)
+9. [Operations and observability](docs/OPERATIONS.md)
+10. [ADR 001: deterministic baseline first](docs/adr/001-deterministic-baseline.md)
 
 ## Local setup
 
@@ -38,6 +47,9 @@ uvicorn src.advisory.web:app --reload
 ```
 
 Open `http://127.0.0.1:8000`.
+
+Local mode uses explicit in-memory adapters and a development identity. Production uses Google ID-token
+verification, Firestore, a private Cloud Storage bucket, Vertex AI, and Application Default Credentials.
 
 ## Quality gates
 

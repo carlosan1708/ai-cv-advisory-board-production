@@ -4,8 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>AI CV Advisory Board</title>
-  <meta name="description" content="Upload your CV, add the job link, and review evidence-led findings.">
-  <link rel="stylesheet" href="/static/app.css?v=6">
+  <meta name="description" content="Track applications, the exact CV you sent, and every next step.">
+  <link rel="stylesheet" href="/static/app.css?v=7">
 </head>
 <body class="welcome-page simple-welcome-page">
   <header class="app-header">
@@ -14,48 +14,46 @@
       <span class="brand-copy"><strong>AI CV</strong><small>Advisory Board</small></span>
     </a>
     <div class="header-nav">
-      <span class="privacy-status"><i aria-hidden="true"></i> Session-only processing</span>
-      <a class="button button-primary button-small" href="/workspace" data-testid="header-start-button">Start review</a>
+      <a href="/workspace">Evidence review</a>
+      <a class="button button-primary button-small" href="/tracker" data-testid="header-start-button">Open workspace</a>
     </div>
   </header>
 
   <main class="welcome-simple shell">
     <section class="welcome-intro" aria-labelledby="welcome-title">
-      <span class="overline">Evidence-first CV review</span>
-      <h1 id="welcome-title">Put your CV in front of the board.</h1>
-      <p>Upload the CV you already use, add the job link you are considering, and get a clear view of what your experience supports and what still needs evidence.</p>
+      <span class="overline">Your career workspace</span>
+      <h1 id="welcome-title">Turn applications into momentum.</h1>
+      <p>Keep every role, next step, and CV version in one calm workspace. Use evidence-led AI when it helps—not as another thing to manage.</p>
       <div class="hero-actions welcome-actions">
-        <a class="button button-primary" href="/workspace" data-testid="get-started-button">Start with your CV <span aria-hidden="true">&rarr;</span></a>
-        <form method="post" action="/demo">
-          <button class="button button-secondary" type="submit" data-testid="demo-button">View a sample review</button>
-        </form>
+        <a class="button button-primary" href="/tracker" data-testid="get-started-button">Open your pipeline <span aria-hidden="true">&rarr;</span></a>
+        <a class="button button-secondary" href="/workspace" data-testid="review-button">Review a CV against a job</a>
       </div>
     </section>
 
-    <section class="review-route" aria-label="How the review works">
+    <section class="review-route" aria-label="How the workspace works">
       <article>
         <span class="route-number">1</span>
-        <div><h2>Upload your CV</h2><p>PDF or TXT, up to 5 MB. Paste text only when you need the fallback.</p></div>
+        <div><h2>Capture the role</h2><p>Company and title are enough to begin. Add the posting when it is useful.</p></div>
       </article>
       <article>
         <span class="route-number">2</span>
-        <div><h2>Add the job link</h2><p>Use the public posting URL. If the site blocks access, paste the description instead.</p></div>
+        <div><h2>Attach what you sent</h2><p>Every application keeps the exact immutable CV version you used.</p></div>
       </article>
       <article>
         <span class="route-number">3</span>
-        <div><h2>Read the findings</h2><p>See recruiter, hiring-manager, and technical evidence in one review.</p></div>
+        <div><h2>Move the next step</h2><p>Use the pipeline and funnel to see what needs your attention now.</p></div>
       </article>
     </section>
 
     <aside class="welcome-limits" aria-label="Product privacy and scoring limitations">
-      <p><strong>Your CV stays in this request.</strong> Files are read in memory and are not persisted.</p>
-      <p><strong>Scores are explainable heuristics.</strong> They are not predictions from a commercial ATS.</p>
+      <p><strong>AI stays optional.</strong> Tracking works without a model call, and the monthly per-user limit defaults to $5.</p>
+      <p><strong>Advice stays grounded.</strong> Suggested claims must point back to evidence in the CV you attached.</p>
     </aside>
   </main>
 
   <footer class="app-footer shell compact-footer">
     <span>AI CV Advisory Board</span>
-    <span>Deterministic baseline &middot; No fabricated claims &middot; No persistence</span>
+    <span>Application tracking &middot; Immutable CV versions &middot; Evidence before claims</span>
     <span>&copy; 2026</span>
   </footer>
 </body>

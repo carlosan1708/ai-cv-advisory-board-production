@@ -124,7 +124,7 @@ def test_job_fetcher_reads_public_html_and_plain_text() -> None:
             return httpx.Response(
                 200,
                 headers={"content-type": "text/html"},
-                text='<main><h1>Platform Engineer</h1><p>Build Python APIs</p></main>',
+                text="<main><h1>Platform Engineer</h1><p>Build Python APIs</p></main>",
             )
         return httpx.Response(200, headers={"content-type": "text/plain"}, text="Lead cloud delivery")
 

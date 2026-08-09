@@ -31,4 +31,3 @@ class AssessmentService:
                 scoring_version=result.scoring_version,
             )
             return run_id, result
-

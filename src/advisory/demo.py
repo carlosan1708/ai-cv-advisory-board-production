@@ -17,4 +17,3 @@ DEMO_JOB = """Senior AI Platform Engineer
 We need a senior engineer with Python, FastAPI, Google Cloud, Docker, SQL, machine learning,
 observability, Kubernetes, Terraform, security, leadership, and automated testing experience.
 """
-

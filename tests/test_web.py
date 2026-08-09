@@ -16,10 +16,114 @@ def test_health() -> None:
 def test_home_explains_product_and_board() -> None:
     response = client.get("/")
     assert response.status_code == 200
-    assert "Put your CV in front of the board" in response.text
-    assert "Upload your CV" in response.text
-    assert "Add the job link" in response.text
-    assert 'href="/static/app.css?v=6"' in response.text
+    assert "Turn applications into momentum" in response.text
+    assert "Capture the role" in response.text
+    assert "Attach what you sent" in response.text
+    assert 'href="/static/app.css?v=7"' in response.text
+
+
+def test_tracker_page_has_board_funnel_and_fast_add() -> None:
+    response = client.get("/tracker")
+    assert response.status_code == 200
+    assert "Application funnel" in response.text
+    assert "data-board" in response.text
+    assert "data-application-dialog" in response.text
+    assert "data-cv-dialog" in response.text
+    assert "$5.00" in response.text
+
+
+def test_tracker_api_creates_moves_and_isolates_application() -> None:
+    web.career_repository.clear()
+    created = client.post(
+        "/api/applications",
+        headers={"x-advisory-user": "alice"},
+        json={"company": "Acme", "role": "AI Engineer", "status": "interested"},
+    )
+    assert created.status_code == 201
+    application_id = created.json()["id"]
+    moved = client.patch(
+        f"/api/applications/{application_id}",
+        headers={"x-advisory-user": "alice"},
+        json={"status": "applied"},
+    )
+    assert moved.json()["status"] == "applied"
+    assert len(client.get("/api/applications", headers={"x-advisory-user": "alice"}).json()) == 1
+    assert client.get("/api/applications", headers={"x-advisory-user": "bob"}).json() == []
+    denied = client.patch(
+        f"/api/applications/{application_id}",
+        headers={"x-advisory-user": "bob"},
+        json={"status": "offer"},
+    )
+    assert denied.status_code == 404
+
+
+def test_cv_version_upload_listing_download_and_attachment() -> None:
+    web.career_repository.clear()
+    headers = {"x-advisory-user": "alice"}
+    uploaded = client.post(
+        "/api/cv-versions",
+        headers=headers,
+        data={"label": "AI platform CV"},
+        files={"cv_file": ("resume.txt", b"EXPERIENCE\nBuilt Python systems", "text/plain")},
+    )
+    assert uploaded.status_code == 201
+    version = uploaded.json()
+    assert "extracted_text" not in version
+    assert client.get("/api/cv-versions", headers=headers).json()[0]["label"] == "AI platform CV"
+    downloaded = client.get(f"/api/cv-versions/{version['id']}/download", headers=headers)
+    assert downloaded.content.startswith(b"EXPERIENCE")
+    assert (
+        client.get(
+            f"/api/cv-versions/{version['id']}/download", headers={"x-advisory-user": "bob"}
+        ).status_code
+        == 404
+    )
+    application = client.post(
+        "/api/applications",
+        headers=headers,
+        json={"company": "Acme", "role": "Engineer", "cv_version_id": version["id"]},
+    )
+    assert application.status_code == 201
+    assert application.json()["cv_version_id"] == version["id"]
+
+
+def test_ai_budget_endpoint_exposes_hard_limit() -> None:
+    payload = client.get("/api/ai/budget", headers={"x-advisory-user": "alice"}).json()
+    assert payload["limit_micro_usd"] == 5_000_000
+    assert payload["remaining_micro_usd"] <= payload["limit_micro_usd"]
+
+
+def test_application_ai_review_requires_cv_and_job_then_persists_summary() -> None:
+    web.career_repository.clear()
+    headers = {"x-advisory-user": "ai-user"}
+    no_cv = client.post(
+        "/api/applications",
+        headers=headers,
+        json={"company": "Acme", "role": "Engineer"},
+    ).json()
+    assert client.post(f"/api/applications/{no_cv['id']}/ai-review", headers=headers).status_code == 422
+    version = client.post(
+        "/api/cv-versions",
+        headers=headers,
+        data={"label": "AI CV"},
+        files={"cv_file": ("resume.txt", b"EXPERIENCE\nBuilt Python services", "text/plain")},
+    ).json()
+    application = client.post(
+        "/api/applications",
+        headers=headers,
+        json={"company": "Acme", "role": "Engineer", "cv_version_id": version["id"]},
+    ).json()
+    missing_job = client.post(f"/api/applications/{application['id']}/ai-review", headers=headers)
+    assert missing_job.status_code == 422
+    reviewed = client.post(
+        f"/api/applications/{application['id']}/ai-review",
+        headers=headers,
+        data={"job_text": "Python platform services"},
+    )
+    assert reviewed.status_code == 200
+    assert reviewed.json()["review"]["fit_score"] > 0
+    stored = client.get("/api/applications", headers=headers).json()[0]
+    assert stored["ai_summary"]
 
 
 def test_workspace_starts_three_stage_review() -> None:
@@ -155,7 +259,7 @@ def test_job_url_error_preserves_cv_and_opens_manual_recovery(monkeypatch: pytes
     assert "CV ready" in response.text
     assert "resume.txt" in response.text
     assert "Built &lt;platform&gt; systems" in response.text
-    assert 'data-job-fallback open' in response.text
+    assert "data-job-fallback open" in response.text
 
 
 def test_user_evidence_is_html_escaped() -> None:

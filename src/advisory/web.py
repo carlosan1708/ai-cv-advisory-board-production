@@ -3,14 +3,20 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from fastapi import FastAPI, File, Form, Request, UploadFile
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.concurrency import run_in_threadpool
 
+from advisory.ai import AiReviewer, BudgetedAiService, DeterministicAiReviewer, GeminiAiReviewer
+from advisory.auth import IdentityVerifier
+from advisory.budget import BudgetLedger, InMemoryBudgetLedger
+from advisory.career import ApplicationCreate, ApplicationUpdate
+from advisory.career_repository import CareerRepository, InMemoryCareerRepository, NotFoundError
 from advisory.demo import DEMO_CV, DEMO_JOB
 from advisory.domain import Assessment
+from advisory.google_persistence import FirestoreBudgetLedger, GoogleCareerRepository
 from advisory.ingestion import (
     CvDocumentError,
     CvDocumentParser,
@@ -20,12 +26,26 @@ from advisory.ingestion import (
 from advisory.observability import emit
 from advisory.service import AssessmentService, InputError
 from advisory.settings import get_settings
+from advisory.tracker_service import TrackerService
 
 BASE_DIR = Path(__file__).resolve().parent
 settings = get_settings()
 app = FastAPI(title=settings.app_name, version="0.1.0")
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 templates = Jinja2Templates(directory=BASE_DIR / "templates")
+identity_verifier = IdentityVerifier(settings.auth_mode, settings.google_oauth_client_id)
+if settings.repository_backend == "firestore":
+    career_repository: CareerRepository = GoogleCareerRepository(settings.gcp_project, settings.cv_bucket)
+    budget_ledger: BudgetLedger = FirestoreBudgetLedger(
+        settings.gcp_project, settings.ai_monthly_limit_micro_usd
+    )
+else:
+    career_repository = InMemoryCareerRepository()
+    budget_ledger = InMemoryBudgetLedger(settings.ai_monthly_limit_micro_usd)
+
+
+def owner_id(request: Request) -> str:
+    return identity_verifier.verify(request).subject
 
 
 def service() -> AssessmentService:
@@ -44,6 +64,23 @@ def job_description_fetcher() -> JobDescriptionFetcher:
         max_response_bytes=settings.max_job_page_bytes,
         max_chars=settings.max_input_chars,
     )
+
+
+def tracker_service() -> TrackerService:
+    return TrackerService(career_repository, cv_document_parser())
+
+
+def ai_service() -> BudgetedAiService:
+    reviewer: AiReviewer
+    if settings.environment == "production":
+        reviewer = GeminiAiReviewer(
+            project=settings.gcp_project,
+            location=settings.gcp_location,
+            model=settings.gemini_model,
+        )
+    else:
+        reviewer = DeterministicAiReviewer()
+    return BudgetedAiService(reviewer, budget_ledger)
 
 
 def render(
@@ -87,6 +124,131 @@ def health() -> dict[str, str]:
 @app.get("/", response_class=HTMLResponse)
 def home(request: Request) -> HTMLResponse:
     return templates.TemplateResponse(request=request, name="welcome.html")
+
+
+@app.get("/tracker", response_class=HTMLResponse)
+def tracker(request: Request) -> HTMLResponse:
+    return templates.TemplateResponse(
+        request=request,
+        name="tracker.html",
+        context={
+            "ai_limit_dollars": settings.ai_monthly_limit_micro_usd / 1_000_000,
+            "auth_mode": settings.auth_mode,
+            "google_oauth_client_id": settings.google_oauth_client_id,
+        },
+    )
+
+
+@app.get("/api/applications")
+def list_applications(request: Request) -> list[dict[str, object]]:
+    return [item.model_dump(mode="json") for item in career_repository.list_applications(owner_id(request))]
+
+
+@app.post("/api/applications", status_code=201)
+def create_application(request: Request, payload: ApplicationCreate) -> dict[str, object]:
+    try:
+        item = career_repository.create_application(owner_id(request), payload)
+    except NotFoundError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    emit("application.created", user_id=owner_id(request), application_id=item.id, status=item.status)
+    return item.model_dump(mode="json")
+
+
+@app.patch("/api/applications/{application_id}")
+def update_application(
+    request: Request, application_id: str, payload: ApplicationUpdate
+) -> dict[str, object]:
+    try:
+        item = career_repository.update_application(owner_id(request), application_id, payload)
+    except NotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    emit("application.updated", user_id=owner_id(request), application_id=item.id, status=item.status)
+    return item.model_dump(mode="json")
+
+
+@app.get("/api/cv-versions")
+def list_cv_versions(request: Request) -> list[dict[str, object]]:
+    versions = career_repository.list_cv_versions(owner_id(request))
+    return [item.model_dump(mode="json", exclude={"extracted_text"}) for item in versions]
+
+
+@app.post("/api/cv-versions", status_code=201)
+async def create_cv_version(
+    request: Request,
+    label: str = Form(...),
+    cv_file: UploadFile = File(...),  # noqa: B008
+) -> dict[str, object]:
+    payload = await cv_file.read(settings.max_upload_bytes + 1)
+    try:
+        item = tracker_service().create_cv_version(
+            owner_id(request),
+            label=label,
+            filename=cv_file.filename or "cv.txt",
+            content_type=cv_file.content_type or "application/octet-stream",
+            content=payload,
+        )
+    except (CvDocumentError, ValueError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    emit("cv_version.created", user_id=owner_id(request), cv_version_id=item.id, file_bytes=item.byte_count)
+    return item.model_dump(mode="json", exclude={"extracted_text"})
+
+
+@app.get("/api/cv-versions/{cv_version_id}/download")
+def download_cv_version(request: Request, cv_version_id: str) -> Response:
+    try:
+        version = career_repository.get_cv_version(owner_id(request), cv_version_id)
+        content = career_repository.get_cv_content(owner_id(request), cv_version_id)
+    except NotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return Response(
+        content,
+        media_type=version.content_type,
+        headers={"Content-Disposition": f'attachment; filename="{version.filename}"'},
+    )
+
+
+@app.get("/api/ai/budget")
+def ai_budget(request: Request) -> dict[str, int]:
+    snapshot = budget_ledger.snapshot(owner_id(request))
+    return {
+        "limit_micro_usd": snapshot.limit_micro_usd,
+        "used_micro_usd": snapshot.used_micro_usd,
+        "reserved_micro_usd": snapshot.reserved_micro_usd,
+        "remaining_micro_usd": snapshot.remaining_micro_usd,
+    }
+
+
+@app.post("/api/applications/{application_id}/ai-review")
+async def application_ai_review(
+    request: Request, application_id: str, job_text: str = Form("")
+) -> dict[str, object]:
+    try:
+        application = career_repository.get_application(owner_id(request), application_id)
+        if not application.cv_version_id:
+            raise HTTPException(status_code=422, detail="Attach a CV version before asking AI to review it")
+        version = career_repository.get_cv_version(owner_id(request), application.cv_version_id)
+    except NotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    resolved_job = job_text.strip()
+    if not resolved_job and application.job_url:
+        try:
+            resolved_job = await run_in_threadpool(job_description_fetcher().fetch, application.job_url)
+        except JobDescriptionError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+    if not resolved_job:
+        raise HTTPException(status_code=422, detail="Add a job description or public job link first")
+    review = await run_in_threadpool(
+        ai_service().review,
+        owner_id(request),
+        version.extracted_text,
+        resolved_job,
+    )
+    career_repository.update_application(
+        owner_id(request),
+        application_id,
+        ApplicationUpdate(fit_score=review.fit_score, ai_summary=review.summary),
+    )
+    return {"review": review.model_dump(), "budget": ai_budget(request)}
 
 
 @app.get("/workspace", response_class=HTMLResponse)

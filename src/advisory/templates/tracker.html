@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Application pipeline · AI CV Advisory Board</title>
+  <meta name="description" content="Track every application, next action, and the exact CV version you sent.">
+  <link rel="stylesheet" href="/static/app.css?v=7">
+  <link rel="stylesheet" href="/static/tracker.css?v=1">
+  {% if auth_mode == "google" %}<script src="https://accounts.google.com/gsi/client" async defer></script>{% endif %}
+</head>
+<body class="tracker-page">
+  {% if auth_mode == "google" %}
+  <section class="auth-gate" data-auth-gate data-client-id="{{ google_oauth_client_id }}">
+    <div><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span><span class="overline">Private career workspace</span></div>
+    <h1>Sign in to your pipeline.</h1>
+    <p>Your applications, CV versions, and AI allowance are isolated by your verified Google identity.</p>
+    <div data-google-signin></div>
+    <small data-auth-error></small>
+  </section>
+  {% endif %}
+  <header class="tracker-header">
+    <a class="brand" href="/" aria-label="AI CV Advisory Board home">
+      <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>
+      <span class="brand-copy"><strong>AI CV</strong><small>Career workspace</small></span>
+    </a>
+    <nav aria-label="Primary navigation">
+      <a class="active" href="/tracker">Pipeline</a>
+      <a href="/workspace">Evidence review</a>
+    </nav>
+    <button class="button button-primary button-small" type="button" data-open-application>+ Add application</button>
+  </header>
+
+  <main class="tracker-shell">
+    <section class="tracker-intro">
+      <div>
+        <span class="overline">Your search, at a glance</span>
+        <h1>Keep every opportunity moving.</h1>
+        <p>Track what happens next and preserve the exact CV you sent—without turning your job search into admin work.</p>
+      </div>
+      <div class="budget-chip" data-budget aria-label="Monthly AI budget">
+        <span>AI this month</span>
+        <strong>$0.00 / ${{ "%.2f"|format(ai_limit_dollars) }}</strong>
+        <small>Hard limit enforced before every call</small>
+      </div>
+    </section>
+
+    <section class="pipeline-summary" aria-labelledby="funnel-title">
+      <div class="summary-heading">
+        <div><span class="overline">Progress</span><h2 id="funnel-title">Application funnel</h2></div>
+        <button class="text-action" type="button" data-clear-filter hidden>Show all</button>
+      </div>
+      <div class="funnel" data-funnel>
+        <button type="button" data-filter="applied"><span>Applied</span><strong data-count="applied">0</strong></button>
+        <button type="button" data-filter="interviewing"><span>Interviewing</span><strong data-count="interviewing">0</strong></button>
+        <button type="button" data-filter="offer"><span>Offers</span><strong data-count="offer">0</strong></button>
+      </div>
+    </section>
+
+    <section class="board-section" aria-labelledby="board-title">
+      <div class="board-heading">
+        <div><span class="overline">Workspace</span><h2 id="board-title">Applications</h2></div>
+        <div class="board-actions">
+          <button class="button button-secondary button-small" type="button" data-open-cv>CV library</button>
+          <button class="button button-primary button-small" type="button" data-open-application>Add application</button>
+        </div>
+      </div>
+
+      <div class="mobile-filter">
+        <label for="mobile-status">Show</label>
+        <select id="mobile-status" data-mobile-filter>
+          <option value="all">All active applications</option>
+          <option value="interested">Interested</option>
+          <option value="applied">Applied</option>
+          <option value="interviewing">Interviewing</option>
+          <option value="offer">Offer</option>
+          <option value="closed">Closed</option>
+        </select>
+      </div>
+
+      <div class="kanban" data-board aria-live="polite"></div>
+      <div class="empty-workspace" data-empty>
+        <div class="empty-orbit" aria-hidden="true"><span></span></div>
+        <h3>Your pipeline starts with one role.</h3>
+        <p>Add a company and role now. Attach a CV or job link when you have them.</p>
+        <button class="button button-primary" type="button" data-open-application>Add your first application</button>
+      </div>
+    </section>
+  </main>
+
+  <dialog class="tracker-dialog" data-application-dialog>
+    <form method="dialog" data-application-form>
+      <div class="dialog-heading">
+        <div><span class="overline">New opportunity</span><h2>Add an application</h2></div>
+        <button class="icon-button" value="cancel" aria-label="Close">×</button>
+      </div>
+      <p class="dialog-lede">Start with the essentials. You can add the rest later.</p>
+      <div class="field-grid two-columns">
+        <label>Company <input name="company" maxlength="120" required autocomplete="organization" placeholder="e.g. Acme"></label>
+        <label>Role <input name="role" maxlength="160" required placeholder="e.g. Staff AI Engineer"></label>
+      </div>
+      <div class="field-grid two-columns">
+        <label>Status
+          <select name="status">
+            <option value="interested">Interested</option><option value="applied">Applied</option>
+            <option value="interviewing">Interviewing</option><option value="offer">Offer</option><option value="closed">Closed</option>
+          </select>
+        </label>
+        <label>CV version <select name="cv_version_id" data-cv-select><option value="">Not attached yet</option></select></label>
+      </div>
+      <details class="optional-fields">
+        <summary>Add job link and next step <span>+</span></summary>
+        <div class="optional-content">
+          <label>Public job link <input name="job_url" type="url" placeholder="https://company.com/jobs/..."></label>
+          <label>Next action <input name="next_action" maxlength="500" placeholder="Follow up with recruiter"></label>
+          <label>Notes <textarea name="notes" maxlength="10000" rows="3" placeholder="Useful context, never a required field"></textarea></label>
+        </div>
+      </details>
+      <p class="form-error" data-application-error role="alert"></p>
+      <div class="dialog-actions"><button class="button button-secondary" value="cancel">Cancel</button><button class="button button-primary" type="submit" value="default">Add application</button></div>
+    </form>
+  </dialog>
+
+  <dialog class="tracker-dialog compact-dialog" data-cv-dialog>
+    <form method="dialog" data-cv-form enctype="multipart/form-data">
+      <div class="dialog-heading">
+        <div><span class="overline">Version history</span><h2>CV library</h2></div>
+        <button class="icon-button" value="cancel" aria-label="Close">×</button>
+      </div>
+      <p class="dialog-lede">Each upload is immutable, so an application always points to the document you actually sent.</p>
+      <label>Version label <input name="label" maxlength="100" required placeholder="AI platform · August 2026"></label>
+      <label class="file-drop">CV file <input name="cv_file" type="file" accept=".pdf,.txt,application/pdf,text/plain" required><small>PDF or TXT · up to 5 MB</small></label>
+      <p class="form-error" data-cv-error role="alert"></p>
+      <div class="cv-library" data-cv-library></div>
+      <div class="dialog-actions"><button class="button button-secondary" value="cancel">Close</button><button class="button button-primary" type="submit" value="default">Upload version</button></div>
+    </form>
+  </dialog>
+
+  <template id="application-card-template">
+    <article class="application-card" draggable="true">
+      <div class="card-top"><span class="company-mark" aria-hidden="true"></span><span class="card-date"></span></div>
+      <h3></h3><p class="company-name"></p>
+      <p class="next-action"></p>
+      <div class="cv-attachment"></div>
+      <button class="ai-review-button" type="button" hidden>Review evidence with AI</button>
+      <p class="ai-summary"></p>
+      <label class="status-control">Move to<select></select></label>
+    </article>
+  </template>
+  <script src="/static/tracker.js?v=2" defer></script>
+</body>
+</html>

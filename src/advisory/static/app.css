@@ -123,7 +123,7 @@ a { color: inherit; }
 
 /* Welcome */
 .simple-welcome-page { min-height: 100vh; display: flex; flex-direction: column; }
-.welcome-simple { flex: 1; padding: clamp(64px, 9vh, 104px) 0 58px; }
+.welcome-simple { flex: 1; padding: clamp(42px, 6vh, 64px) 0 34px; }
 .welcome-intro { max-width: 790px; margin-inline: auto; text-align: center; }
 .welcome-intro h1 {
   margin: 17px 0 20px;
@@ -136,13 +136,13 @@ a { color: inherit; }
 .welcome-actions { justify-content: center; margin-top: 29px; }
 .review-route {
   max-width: 940px;
-  margin: clamp(62px, 9vh, 92px) auto 0;
+  margin: clamp(38px, 6vh, 56px) auto 0;
   border-top: 1px solid var(--line-strong);
   border-bottom: 1px solid var(--line);
   display: grid;
   grid-template-columns: repeat(3, 1fr);
 }
-.review-route article { min-height: 126px; padding: 23px 24px; display: grid; grid-template-columns: 28px 1fr; gap: 12px; align-content: center; }
+.review-route article { min-height: 108px; padding: 19px 24px; display: grid; grid-template-columns: 28px 1fr; gap: 12px; align-content: center; }
 .review-route article + article { border-left: 1px solid var(--line); }
 .route-number { color: var(--brand); font-size: 0.74rem; font-weight: 800; }
 .review-route h2 { margin: 0 0 5px; font-size: 0.91rem; letter-spacing: -0.01em; }
@@ -150,7 +150,7 @@ a { color: inherit; }
 .welcome-limits { max-width: 940px; margin: 22px auto 0; display: grid; grid-template-columns: repeat(2, 1fr); gap: 26px; }
 .welcome-limits p { margin: 0; color: var(--muted); font-size: 0.7rem; line-height: 1.55; }
 .welcome-limits strong { color: var(--ink-soft); }
-.compact-footer { min-height: 64px; }
+.compact-footer { min-height: 56px; }
 
 .hero {
   min-height: 660px;

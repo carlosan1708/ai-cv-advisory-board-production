@@ -7,9 +7,19 @@
 - Region: `us-central1`
 - Runtime: stateless Cloud Run container, scale-to-zero allowed
 - Health contract: `GET /api/health` returns `{"status":"ok"}`
+- Firestore: owner-scoped applications, CV metadata/extracted text, and monthly AI ledgers
+- Cloud Storage: private immutable CV bytes in `users/{subject}/cv-versions/...`
+- Vertex AI model: `gemini-3.5-flash-lite`, global endpoint, minimal thinking
+- Identity: Google ID token; stable `sub` claim is the owner key
+- Per-user AI limit: 5,000,000 micro-USD per calendar month unless explicitly configured otherwise
 
-No database, object store, background queue, model key, or user content persistence is required for this
-slice.
+Production environment variables:
+
+- `ADVISORY_ENVIRONMENT=production`
+- `ADVISORY_REPOSITORY_BACKEND=firestore`
+- `ADVISORY_AUTH_MODE=google`
+- `ADVISORY_GOOGLE_OAUTH_CLIENT_ID=<web client ID>`
+- `ADVISORY_CV_BUCKET=ai-cv-advisory-board-production-cvs`
 
 ## Structured events
 
@@ -23,6 +33,10 @@ The `advisory` logger emits one-line JSON events:
 | `job.ingestion.failed` | source, error_type | Remote-page recovery rate |
 | `operation.started/finished/failed` | operation, run_id, duration_ms, error_type | Assessment latency and failures |
 | `assessment.completed` | run_id, lengths, score, scoring_version | Scoring throughput and version audit |
+| `application.created/updated` | opaque user/application IDs, status | Pipeline activity |
+| `cv_version.created` | opaque user/version IDs, byte count | Immutable CV creation |
+| `gemini.request.completed` | opaque user ID, model, tokens, micro-USD, duration | AI cost and latency |
+| `gemini.request.failed` | opaque user ID, model | Provider failure rate |
 
 The logging safety filter removes document text, filenames, credentials, prompts, and full URLs even when
 those fields are passed accidentally.
@@ -35,6 +49,8 @@ those fields are passed accidentally.
   started blocking server-side reads.
 - Ratio of upload failures to completions; a rise can indicate unsupported or scanned CV formats.
 - Cloud Run instance count, request concurrency, outbound latency, and billable instance time.
+- AI used plus reserved micro-USD; the transaction must never allow their sum above the user limit.
+- Stale reservation documents, which indicate an interrupted model request and require reconciliation.
 
 No alert threshold is encoded yet because the service has one private user and no traffic baseline. Establish
 a seven-day baseline before choosing thresholds; until then, any sustained health failure or repeated server
@@ -45,8 +61,8 @@ error is actionable.
 1. Run Ruff, mypy, unit/integration tests with coverage, offline evaluations, and all Playwright tests.
 2. Build and deploy from the personal repository to the named project and service.
 3. Confirm the new revision receives 100% of traffic and `/api/health` succeeds.
-4. In a real browser, verify the quiet welcome, TXT upload, back/forward preservation, manual job fallback,
-   findings, JSON export, mobile overflow, and a clean console.
+4. In a real browser, verify Google sign-in, application creation, status movement, funnel updates, immutable CV
+   attachment, AI budget display, the retained evidence-review flow, mobile overflow, and a clean console.
 5. If verification fails, route traffic back to the prior healthy revision and investigate without deleting it.
 
 ## Failure recovery
