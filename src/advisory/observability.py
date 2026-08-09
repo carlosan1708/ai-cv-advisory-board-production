@@ -16,7 +16,17 @@ logger.setLevel(logging.INFO)
 
 
 def emit(event: str, **fields: object) -> None:
-    blocked = {"cv_text", "job_text", "api_key", "prompt"}
+    blocked = {
+        "api_key",
+        "cv_text",
+        "file_name",
+        "filename",
+        "full_url",
+        "job_text",
+        "job_url",
+        "prompt",
+        "url",
+    }
     safe = {key: value for key, value in fields.items() if key not in blocked}
     logger.info(json.dumps({"event": event, **safe}, sort_keys=True, default=str))
 

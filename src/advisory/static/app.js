@@ -1,6 +1,50 @@
 (() => {
   const panels = [...document.querySelectorAll("[data-step-panel]")];
   const indicators = [...document.querySelectorAll("[data-step-indicator]")];
+  const reviewForm = document.querySelector("[data-testid='guided-form']");
+  const fileInput = document.querySelector("[data-testid='cv-file-input']");
+  const uploadZone = document.querySelector("[data-upload-zone]");
+  const uploadSelection = document.querySelector("[data-upload-selection]");
+  const fileName = document.querySelector("[data-file-name]");
+  const fileSize = document.querySelector("[data-file-size]");
+  const changeFileButton = document.querySelector("[data-change-file]");
+  const uploadError = document.querySelector("[data-upload-error]");
+  const cvText = document.querySelector("[data-testid='cv-input']");
+  const jobUrl = document.querySelector("[data-testid='job-url-input']");
+  const jobText = document.querySelector("[data-testid='job-input']");
+  const sourceError = document.querySelector("[data-source-error]");
+  const maximumFileSize = 5 * 1024 * 1024;
+
+  const humanFileSize = (bytes) => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
+  const fileValidationMessage = (file) => {
+    if (!file) return "";
+    const extension = file.name.split(".").pop()?.toLowerCase();
+    if (!["pdf", "txt"].includes(extension)) return "Choose a PDF or TXT CV.";
+    if (file.size > maximumFileSize) return "Choose a CV smaller than 5 MB.";
+    if (file.size === 0) return "That file is empty. Choose another CV.";
+    return "";
+  };
+
+  const renderSelectedFile = (file) => {
+    const message = fileValidationMessage(file);
+    if (uploadError) uploadError.textContent = message;
+    if (message || !file) {
+      if (fileInput && message) fileInput.value = "";
+      uploadZone?.removeAttribute("hidden");
+      if (uploadSelection) uploadSelection.hidden = true;
+      return false;
+    }
+    if (fileName) fileName.textContent = file.name;
+    if (fileSize) fileSize.textContent = humanFileSize(file.size);
+    uploadZone?.setAttribute("hidden", "");
+    if (uploadSelection) uploadSelection.hidden = false;
+    return true;
+  };
 
   const setIndicatorState = (activeStep) => {
     indicators.forEach((indicator) => {
@@ -25,12 +69,11 @@
 
   document.querySelectorAll("[data-next-step]").forEach((button) => {
     button.addEventListener("click", () => {
-      const currentPanel = button.closest("[data-step-panel]");
-      const required = currentPanel?.querySelector("textarea[required]");
-      if (required && !required.value.trim()) {
-        required.setCustomValidity("Paste your CV content before continuing.");
-        required.reportValidity();
-        required.addEventListener("input", () => required.setCustomValidity(""), { once: true });
+      const selectedFile = fileInput?.files?.[0];
+      if (selectedFile && !renderSelectedFile(selectedFile)) return;
+      if (!selectedFile && !cvText?.value.trim()) {
+        if (uploadError) uploadError.textContent = "Upload a PDF or TXT CV, or open the fallback to paste its text.";
+        fileInput?.focus();
         return;
       }
       showStep(button.dataset.nextStep);
@@ -49,13 +92,69 @@
     input.addEventListener("input", update);
   });
 
-  const reviewForm = document.querySelector("[data-testid='guided-form']");
-  reviewForm?.addEventListener("submit", () => {
-    const submitButton = reviewForm.querySelector("[data-testid='analyze-button']");
-    if (!submitButton || !reviewForm.checkValidity()) return;
-    submitButton.setAttribute("aria-busy", "true");
-    submitButton.textContent = "Running board review...";
+  fileInput?.addEventListener("change", () => renderSelectedFile(fileInput.files?.[0]));
+  changeFileButton?.addEventListener("click", () => fileInput?.click());
+  cvText?.addEventListener("input", () => {
+    if (uploadError && cvText.value.trim()) uploadError.textContent = "";
   });
+
+  ["dragenter", "dragover"].forEach((eventName) => {
+    uploadZone?.addEventListener(eventName, (event) => {
+      event.preventDefault();
+      uploadZone.classList.add("dragging");
+    });
+  });
+  ["dragleave", "drop"].forEach((eventName) => {
+    uploadZone?.addEventListener(eventName, (event) => {
+      event.preventDefault();
+      uploadZone.classList.remove("dragging");
+    });
+  });
+  uploadZone?.addEventListener("drop", (event) => {
+    const droppedFile = event.dataTransfer?.files?.[0];
+    if (!droppedFile || !renderSelectedFile(droppedFile) || !fileInput) return;
+    const transfer = new DataTransfer();
+    transfer.items.add(droppedFile);
+    fileInput.files = transfer.files;
+  });
+
+  const validateTarget = () => {
+    const manualDescription = jobText?.value.trim() || "";
+    const url = jobUrl?.value.trim() || "";
+    if (sourceError) sourceError.textContent = "";
+    if (manualDescription) return true;
+    if (!url) {
+      if (sourceError) sourceError.textContent = "Add a public job link, or open the fallback to paste the description.";
+      jobUrl?.focus();
+      return false;
+    }
+    try {
+      const parsed = new URL(url);
+      if (parsed.protocol !== "https:") throw new Error("unsupported protocol");
+    } catch (_) {
+      if (sourceError) sourceError.textContent = "Enter a complete HTTPS job link, such as https://company.com/jobs/role.";
+      jobUrl?.focus();
+      return false;
+    }
+    return true;
+  };
+
+  jobUrl?.addEventListener("input", () => { if (sourceError) sourceError.textContent = ""; });
+  jobText?.addEventListener("input", () => { if (sourceError) sourceError.textContent = ""; });
+
+  reviewForm?.addEventListener("submit", (event) => {
+    if (!validateTarget()) {
+      event.preventDefault();
+      return;
+    }
+    const submitButton = reviewForm.querySelector("[data-testid='analyze-button']");
+    if (!submitButton) return;
+    submitButton.setAttribute("aria-busy", "true");
+    submitButton.textContent = "Reading the job and running review...";
+  });
+
+  const visiblePanel = panels.find((panel) => panel.classList.contains("visible"));
+  if (visiblePanel) setIndicatorState(Number(visiblePanel.dataset.stepPanel));
 
   document.querySelectorAll("[data-download-json]").forEach((button) => {
     button.addEventListener("click", () => {

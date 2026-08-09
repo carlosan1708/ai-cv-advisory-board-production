@@ -5,13 +5,16 @@ Status: Accepted
 ## Boundaries
 
 ```text
-Browser -> FastAPI web adapter -> AssessmentService -> domain scoring policy
-                                      |-> structured event logger
+Browser -> FastAPI web adapter -> CV parser -----------\
+                            |-> safe job-page fetcher ---+-> AssessmentService -> scoring policy
+                            |-> structured event logger /
 ```
 
 - Domain code has no FastAPI, storage, browser, or model-provider imports.
 - Application services orchestrate domain policies.
 - Web code translates HTTP inputs and outputs.
+- Document ingestion is an adapter boundary: PDF/TXT parsing is bounded and job-page reads are public,
+  HTTPS-only, redirect-aware, byte-limited, and content-type-limited.
 - External AI will be introduced behind an adapter after a deterministic evaluation baseline exists.
 
 ## Deployment modes
@@ -22,5 +25,6 @@ Browser -> FastAPI web adapter -> AssessmentService -> domain scoring policy
 
 ## Data classification
 
-CV and job text are sensitive transient content. They may be held in request memory but are never logged or persisted in v0.1. Only lengths, hashes, run IDs, timing, versions, and aggregate counts may enter logs.
-
+CV files, extracted text, job URLs, and job descriptions are sensitive transient content. They may be held
+in request memory but are never logged or persisted. Only source type, byte/character counts, error types,
+run IDs, timing, versions, and aggregate counts may enter logs.

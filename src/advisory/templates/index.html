@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Review workspace | AI CV Advisory Board</title>
   <meta name="description" content="Build an evidence-led CV review for a specific role.">
-  <link rel="stylesheet" href="/static/app.css?v=5">
-  <script src="/static/app.js?v=5" defer></script>
+  <link rel="stylesheet" href="/static/app.css?v=6">
+  <script src="/static/app.js?v=6" defer></script>
 </head>
 <body class="workspace-page{% if assessment %} has-results{% endif %}{% if error %} has-error{% endif %}">
   <header class="app-header workspace-header">
@@ -29,17 +29,17 @@
     {% else %}
     <div class="workspace-title">
       <span class="overline">Guided board review</span>
-      <h1>Build a defensible case for this role.</h1>
-      <p>Two inputs in. Traceable findings out. Your text is processed for this response and is not persisted.</p>
+      <h1>Review your CV against a real job.</h1>
+      <p>Upload your CV, add the public job link, and review the evidence. Files are processed for this request and are not persisted.</p>
     </div>
     {% endif %}
 
     <nav class="progress-rail" aria-label="Review progress">
       <div class="progress-step {% if not assessment %}active{% else %}complete{% endif %}" data-step-indicator="1">
-        <span class="progress-marker">1</span><div><strong>Evidence</strong><small>Your CV content</small></div>
+        <span class="progress-marker">1</span><div><strong>CV</strong><small>PDF or TXT</small></div>
       </div>
       <div class="progress-step {% if assessment %}complete{% endif %}" data-step-indicator="2">
-        <span class="progress-marker">2</span><div><strong>Target</strong><small>The role brief</small></div>
+        <span class="progress-marker">2</span><div><strong>Job</strong><small>Public job link</small></div>
       </div>
       <div class="progress-step {% if assessment %}active{% endif %}" data-step-indicator="3">
         <span class="progress-marker">3</span><div><strong>Findings</strong><small>Board review</small></div>
@@ -51,56 +51,91 @@
     {% endif %}
 
     {% if not assessment %}
-    <div class="review-layout">
-      <form method="post" action="/analyze" class="review-form" data-testid="guided-form">
-        <section class="review-panel {% if not error %}visible{% endif %}" data-step-panel="1" aria-labelledby="cv-step-title">
+    <div class="document-review-layout">
+      <form method="post" action="/analyze" enctype="multipart/form-data" class="review-form document-review-form" data-testid="guided-form" novalidate>
+        <section class="review-panel {% if error_stage != 2 %}visible{% endif %}" data-step-panel="1" aria-labelledby="cv-step-title">
           <div class="panel-heading">
             <span class="stage-label">Stage 1 of 2</span>
-            <h2 id="cv-step-title" tabindex="-1">Add the evidence you want challenged.</h2>
-            <p>Paste the complete CV text. Keep dates, outcomes, technologies, and section headings intact so findings can point to specific evidence.</p>
+            <h2 id="cv-step-title" tabindex="-1">Upload the CV you want reviewed.</h2>
+            <p>Use the same document you would send with an application. We extract its text in memory and do not store the file.</p>
           </div>
-          <div class="field-card">
-            <div class="field-heading"><label for="cv-text">CV content</label><span>Required</span></div>
-            <textarea id="cv-text" name="cv_text" data-testid="cv-input" required maxlength="30000" placeholder="Paste your CV text here...">{{ cv_text }}</textarea>
-            <div class="field-meta"><span><strong data-char-count="cv-text">0</strong> / 30,000 characters</span><span>Processed in memory</span></div>
+
+          <div class="document-upload-card">
+            <input class="file-input" id="cv-file" name="cv_file" type="file" accept=".pdf,.txt,application/pdf,text/plain" data-testid="cv-file-input">
+            <label class="upload-zone" for="cv-file" data-upload-zone data-testid="cv-upload-zone" {% if cv_filename %}hidden{% endif %}>
+              <span class="upload-icon" aria-hidden="true"><i></i></span>
+              <span class="upload-copy"><strong>Drop your CV here</strong><small>or choose a file from your computer</small></span>
+              <span class="upload-rule">PDF or TXT &middot; Up to 5 MB</span>
+            </label>
+            <div class="upload-selection" data-upload-selection {% if not cv_filename %}hidden{% endif %}>
+              <span class="file-type" aria-hidden="true">CV</span>
+              <span><strong data-file-name>{{ cv_filename }}</strong><small data-file-size>{% if cv_filename %}Text recovered from your upload{% endif %}</small></span>
+              <button type="button" data-change-file>Change</button>
+            </div>
+            <p class="upload-error" data-upload-error role="alert" aria-live="polite"></p>
           </div>
+
+          <details class="fallback-disclosure" {% if cv_text %}open{% endif %}>
+            <summary>Paste CV text instead <span aria-hidden="true">+</span></summary>
+            <div class="fallback-content">
+              <label for="cv-text">CV content</label>
+              <textarea id="cv-text" name="cv_text" data-testid="cv-input" maxlength="30000" placeholder="Paste your CV text here...">{{ cv_text }}</textarea>
+              <div class="field-meta"><span><strong data-char-count="cv-text">0</strong> / 30,000 characters</span><span>Fallback input</span></div>
+            </div>
+          </details>
+
           <div class="panel-actions">
             <a class="text-action" href="/">&larr; Back to overview</a>
-            <button class="button button-primary" type="button" data-next-step="2">Continue to target <span aria-hidden="true">&rarr;</span></button>
+            <button class="button button-primary" type="button" data-next-step="2">Continue to job <span aria-hidden="true">&rarr;</span></button>
           </div>
         </section>
 
-        <section class="review-panel {% if error %}visible{% endif %}" data-step-panel="2" aria-labelledby="job-step-title">
+        <section class="review-panel {% if error_stage == 2 %}visible{% endif %}" data-step-panel="2" aria-labelledby="job-step-title">
           <div class="panel-heading">
             <span class="stage-label">Stage 2 of 2</span>
-            <h2 id="job-step-title" tabindex="-1">Define the decision your CV must support.</h2>
-            <p>Paste the full role description. Responsibilities, qualifications, and seniority language all help the board identify what matters.</p>
+            <h2 id="job-step-title" tabindex="-1">Add the job you are considering.</h2>
+            <p>Paste the public posting link. We read the description for this review; if the site blocks access, use the manual fallback.</p>
           </div>
-          <div class="field-card">
-            <div class="field-heading"><label for="job-text">Job description</label><span>Required</span></div>
-            <textarea id="job-text" name="job_text" data-testid="job-input" required maxlength="30000" placeholder="Paste the complete job description here...">{{ job_text }}</textarea>
-            <div class="field-meta"><span><strong data-char-count="job-text">0</strong> / 30,000 characters</span><span>Nothing persisted</span></div>
+
+          {% if cv_filename %}
+          <div class="recovered-file" role="status">
+            <span aria-hidden="true">&check;</span>
+            <p><strong>CV ready</strong><small>{{ cv_filename }}</small></p>
           </div>
+          {% endif %}
+
+          <div class="url-field-card">
+            <div class="field-heading"><label for="job-url">Public job link</label><span>Recommended</span></div>
+            <div class="url-input-row">
+              <span aria-hidden="true">&#8599;</span>
+              <input id="job-url" name="job_url" type="url" inputmode="url" autocomplete="url" value="{{ job_url }}" placeholder="https://company.com/jobs/role" data-testid="job-url-input">
+            </div>
+            <p>HTTPS pages only. Private networks, sign-in pages, and unsupported files are blocked.</p>
+          </div>
+
+          <details class="fallback-disclosure" data-job-fallback {% if job_text or error_stage == 2 %}open{% endif %}>
+            <summary>Paste the job description instead <span aria-hidden="true">+</span></summary>
+            <div class="fallback-content">
+              <label for="job-text">Job description</label>
+              <textarea id="job-text" name="job_text" data-testid="job-input" maxlength="30000" placeholder="Paste responsibilities and qualifications here...">{{ job_text }}</textarea>
+              <div class="field-meta"><span><strong data-char-count="job-text">0</strong> / 30,000 characters</span><span>Manual fallback</span></div>
+            </div>
+          </details>
+          <p class="source-error" data-source-error role="alert" aria-live="polite"></p>
+
           <div class="panel-actions">
-            <button class="text-action as-button" type="button" data-previous-step="1">&larr; Back to evidence</button>
+            <button class="text-action as-button" type="button" data-previous-step="1">&larr; Back to CV</button>
             <button class="button button-primary" type="submit" data-testid="analyze-button">Run board review <span aria-hidden="true">&rarr;</span></button>
           </div>
         </section>
       </form>
 
-      <aside class="review-brief" aria-label="Review brief">
-        <div class="brief-top"><span class="overline">Your board</span><span class="baseline-badge">Baseline 1.0</span></div>
-        <h2>Three lenses, one evidence contract.</h2>
-        <div class="brief-advisors">
-          <div><span class="advisor-avatar">TR</span><p><strong>Technical Recruiter</strong><small>Requirement coverage and positioning</small></p></div>
-          <div><span class="advisor-avatar">HM</span><p><strong>Hiring Manager</strong><small>Structure, seniority, and impact signals</small></p></div>
-          <div><span class="advisor-avatar">TE</span><p><strong>Technical Reviewer</strong><small>Specific, traceable technical evidence</small></p></div>
-        </div>
-        <div class="brief-rule"><span aria-hidden="true">!</span><p><strong>Truthfulness rule</strong><small>The board identifies missing evidence. It never turns a gap into a candidate claim.</small></p></div>
+      <div class="sample-route">
+        <span>Want to see the output first?</span>
         <form method="post" action="/demo">
-          <button type="submit" class="button button-secondary button-full" data-testid="workspace-demo-button">Use synthetic sample</button>
+          <button type="submit" class="text-action as-button" data-testid="workspace-demo-button">Open a synthetic sample &rarr;</button>
         </form>
-      </aside>
+      </div>
     </div>
     {% endif %}
 

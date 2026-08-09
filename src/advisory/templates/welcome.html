@@ -4,108 +4,56 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>AI CV Advisory Board</title>
-  <meta name="description" content="Pressure-test your CV against a real role with an evidence-led advisory board.">
-  <link rel="stylesheet" href="/static/app.css?v=5">
+  <meta name="description" content="Upload your CV, add the job link, and review evidence-led findings.">
+  <link rel="stylesheet" href="/static/app.css?v=6">
 </head>
-<body class="welcome-page">
+<body class="welcome-page simple-welcome-page">
   <header class="app-header">
     <a class="brand" href="/" aria-label="AI CV Advisory Board home">
       <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>
       <span class="brand-copy"><strong>AI CV</strong><small>Advisory Board</small></span>
     </a>
-    <nav class="header-nav" aria-label="Primary navigation">
-      <a href="#deliverables">What you get</a>
+    <div class="header-nav">
       <span class="privacy-status"><i aria-hidden="true"></i> Session-only processing</span>
       <a class="button button-primary button-small" href="/workspace" data-testid="header-start-button">Start review</a>
-    </nav>
+    </div>
   </header>
 
-  <main>
-    <section class="hero shell">
-      <div class="hero-content">
-        <div class="product-kicker"><span>Production baseline</span><span>Evidence first</span></div>
-        <h1>Your CV should make its case before you enter the interview.</h1>
-        <p class="hero-lede">Pressure-test your experience against a real role through three hiring lenses. See what your CV proves, where the evidence is thin, and what to improve without inventing a claim.</p>
-        <div class="hero-actions">
-          <a class="button button-primary" href="/workspace" data-testid="get-started-button">Start a board review <span aria-hidden="true">&rarr;</span></a>
-          <form method="post" action="/demo">
-            <button class="button button-secondary" type="submit" data-testid="demo-button">Open a sample finding</button>
-          </form>
-        </div>
-        <ul class="hero-proof" aria-label="Product safeguards">
-          <li><span aria-hidden="true">01</span> Trace every match to CV text</li>
-          <li><span aria-hidden="true">02</span> Keep unsupported claims out</li>
-          <li><span aria-hidden="true">03</span> Store nothing from the review</li>
-        </ul>
-      </div>
-
-      <aside class="briefing-card" aria-label="Sample advisory board briefing">
-        <div class="briefing-header">
-          <div><span class="overline">Sample board briefing</span><strong>Senior AI Engineer</strong></div>
-          <span class="ready-badge"><i aria-hidden="true"></i> Ready</span>
-        </div>
-        <div class="briefing-score">
-          <div class="score-gauge" aria-label="Sample alignment score 84 out of 100"><strong>84</strong><span>/100</span></div>
-          <div><span class="overline">Role alignment</span><strong>Credible, with two evidence gaps</strong><p>Eight of ten priority requirements are supported by direct CV evidence.</p></div>
-        </div>
-        <div class="advisor-stack" aria-label="Advisory roles">
-          <article>
-            <span class="advisor-avatar">TR</span>
-            <div><strong>Technical Recruiter</strong><small>Clear positioning for the role</small></div>
-            <span class="advisor-state supported">Supported</span>
-          </article>
-          <article>
-            <span class="advisor-avatar">HM</span>
-            <div><strong>Hiring Manager</strong><small>Impact needs stronger measures</small></div>
-            <span class="advisor-state attention">Review</span>
-          </article>
-          <article>
-            <span class="advisor-avatar">TE</span>
-            <div><strong>Technical Reviewer</strong><small>Architecture evidence is specific</small></div>
-            <span class="advisor-state supported">Supported</span>
-          </article>
-        </div>
-        <div class="briefing-footer"><span>Evidence ledger</span><strong>12 findings mapped</strong></div>
-      </aside>
-    </section>
-
-    <section class="deliverables shell" id="deliverables" aria-labelledby="deliverables-title">
-      <div class="section-heading">
-        <span class="overline">The complete review</span>
-        <h2 id="deliverables-title">One brief. Three lenses. A defensible action plan.</h2>
-        <p>The interface stays simple because the output does the explaining.</p>
-      </div>
-      <div class="deliverable-grid">
-        <article>
-          <span class="deliverable-number">01</span>
-          <div><h3>Role coverage</h3><p>A bounded, decomposed score shows which requirements appear in your CV and which do not.</p></div>
-        </article>
-        <article>
-          <span class="deliverable-number">02</span>
-          <div><h3>Advisor lenses</h3><p>Recruiting, hiring, and technical perspectives make each part of the review easier to interpret.</p></div>
-        </article>
-        <article>
-          <span class="deliverable-number">03</span>
-          <div><h3>Evidence ledger</h3><p>Every supported requirement links to the exact line that backs it. Every gap becomes a truthful next action.</p></div>
-        </article>
+  <main class="welcome-simple shell">
+    <section class="welcome-intro" aria-labelledby="welcome-title">
+      <span class="overline">Evidence-first CV review</span>
+      <h1 id="welcome-title">Put your CV in front of the board.</h1>
+      <p>Upload the CV you already use, add the job link you are considering, and get a clear view of what your experience supports and what still needs evidence.</p>
+      <div class="hero-actions welcome-actions">
+        <a class="button button-primary" href="/workspace" data-testid="get-started-button">Start with your CV <span aria-hidden="true">&rarr;</span></a>
+        <form method="post" action="/demo">
+          <button class="button button-secondary" type="submit" data-testid="demo-button">View a sample review</button>
+        </form>
       </div>
     </section>
 
-    <section class="workflow shell" aria-labelledby="workflow-title">
-      <div>
-        <span class="overline">Focused by design</span>
-        <h2 id="workflow-title">From pasted text to useful findings in three stages.</h2>
-      </div>
-      <ol>
-        <li><span>1</span><div><strong>Add your evidence</strong><small>Paste the CV content you want assessed.</small></div></li>
-        <li><span>2</span><div><strong>Define the target</strong><small>Add the complete job description.</small></div></li>
-        <li><span>3</span><div><strong>Read the board findings</strong><small>Inspect support, gaps, and safe actions.</small></div></li>
-      </ol>
-      <a class="button button-primary" href="/workspace">Begin with your CV <span aria-hidden="true">&rarr;</span></a>
+    <section class="review-route" aria-label="How the review works">
+      <article>
+        <span class="route-number">1</span>
+        <div><h2>Upload your CV</h2><p>PDF or TXT, up to 5 MB. Paste text only when you need the fallback.</p></div>
+      </article>
+      <article>
+        <span class="route-number">2</span>
+        <div><h2>Add the job link</h2><p>Use the public posting URL. If the site blocks access, paste the description instead.</p></div>
+      </article>
+      <article>
+        <span class="route-number">3</span>
+        <div><h2>Read the findings</h2><p>See recruiter, hiring-manager, and technical evidence in one review.</p></div>
+      </article>
     </section>
+
+    <aside class="welcome-limits" aria-label="Product privacy and scoring limitations">
+      <p><strong>Your CV stays in this request.</strong> Files are read in memory and are not persisted.</p>
+      <p><strong>Scores are explainable heuristics.</strong> They are not predictions from a commercial ATS.</p>
+    </aside>
   </main>
 
-  <footer class="app-footer shell">
+  <footer class="app-footer shell compact-footer">
     <span>AI CV Advisory Board</span>
     <span>Deterministic baseline &middot; No fabricated claims &middot; No persistence</span>
     <span>&copy; 2026</span>
