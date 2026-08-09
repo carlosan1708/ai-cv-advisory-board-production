@@ -50,6 +50,7 @@ pytest tests_e2e -q
 Google Cloud project: `ai-cv-advisory-board`. The container is designed for Cloud Run and listens on `$PORT`.
 
 - Production service: https://ai-cv-advisory-board-production-142795288331.us-central1.run.app
+- Production health endpoint: https://ai-cv-advisory-board-production-142795288331.us-central1.run.app/api/health
 - Region: `us-central1`
 - Cloud Run service: `ai-cv-advisory-board-production`
 - Initial production revision: `ai-cv-advisory-board-production-00001-6tc`

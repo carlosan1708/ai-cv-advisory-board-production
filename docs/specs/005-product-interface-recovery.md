@@ -85,4 +85,4 @@ There is no fictional fourth interactive step. The board review happens during t
 - Unit and integration tests cover all routes and API error contracts.
 - Playwright covers Welcome, sample findings, custom findings, validation, backward navigation, character counts, JSON download, mobile overflow, and browser console cleanliness.
 - The production regression repeats the primary demo and custom-review flows against the deployed Cloud Run URL.
-- The final deployed revision must return HTTP 200 for `/` and `/healthz`.
+- The final deployed revision must return HTTP 200 for `/` and `/api/health`; `/healthz` remains available for local container checks because Google infrastructure intercepts that path on the public `run.app` edge.

@@ -7,6 +7,7 @@ client = TestClient(app)
 
 def test_health() -> None:
     assert client.get("/healthz").json() == {"status": "ok"}
+    assert client.get("/api/health").json() == {"status": "ok"}
 
 
 def test_home_explains_product_and_board() -> None:

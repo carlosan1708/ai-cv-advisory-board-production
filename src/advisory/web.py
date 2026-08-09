@@ -50,6 +50,7 @@ def render(
     )
 
 
+@app.get("/api/health")
 @app.get("/healthz")
 def health() -> dict[str, str]:
     return {"status": "ok"}
