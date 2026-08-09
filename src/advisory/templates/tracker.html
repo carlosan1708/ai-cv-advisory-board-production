@@ -6,17 +6,21 @@
   <title>Application pipeline · AI CV Advisory Board</title>
   <meta name="description" content="Track every application, next action, and the exact CV version you sent.">
   <link rel="stylesheet" href="/static/app.css?v=7">
-  <link rel="stylesheet" href="/static/tracker.css?v=1">
+  <link rel="stylesheet" href="/static/tracker.css?v=2">
   {% if auth_mode == "google" %}<script src="https://accounts.google.com/gsi/client" async defer></script>{% endif %}
 </head>
 <body class="tracker-page">
   {% if auth_mode == "google" %}
   <section class="auth-gate" data-auth-gate data-client-id="{{ google_oauth_client_id }}">
-    <div><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span><span class="overline">Private career workspace</span></div>
-    <h1>Sign in to your pipeline.</h1>
-    <p>Your applications, CV versions, and AI allowance are isolated by your verified Google identity.</p>
-    <div data-google-signin></div>
-    <small data-auth-error></small>
+    <div class="auth-panel">
+      <a class="auth-back" href="/">&larr; Choose another mode</a>
+      <div class="auth-brand"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span><span class="overline">Private workspace</span></div>
+      <h1>Continue to your pipeline.</h1>
+      <p>Sign in with Google. Your account must be approved by the workspace administrator before any private data is available.</p>
+      <div class="auth-signin" data-google-signin></div>
+      <div class="access-state" data-access-state hidden><strong data-access-title></strong><p data-access-copy></p><button class="button button-primary" type="button" data-request-access>Request access</button></div>
+      <small data-auth-error role="alert"></small>
+    </div>
   </section>
   {% endif %}
   <header class="tracker-header">
@@ -27,6 +31,7 @@
     <nav aria-label="Primary navigation">
       <a class="active" href="/tracker">Pipeline</a>
       <a href="/workspace">Evidence review</a>
+      <a href="/admin" data-admin-link hidden>Access</a>
     </nav>
     <button class="button button-primary button-small" type="button" data-open-application>+ Add application</button>
   </header>
@@ -38,10 +43,10 @@
         <h1>Keep every opportunity moving.</h1>
         <p>Track what happens next and preserve the exact CV you sent—without turning your job search into admin work.</p>
       </div>
-      <div class="budget-chip" data-budget aria-label="Monthly AI budget">
-        <span>AI this month</span>
-        <strong>$0.00 / ${{ "%.2f"|format(ai_limit_dollars) }}</strong>
-        <small>Hard limit enforced before every call</small>
+      <div class="budget-chip" data-budget aria-label="Approved member AI access">
+        <span>Member AI</span>
+        <strong>No in-app cap</strong>
+        <small>Access controlled by the administrator</small>
       </div>
     </section>
 
@@ -147,6 +152,6 @@
       <label class="status-control">Move to<select></select></label>
     </article>
   </template>
-  <script src="/static/tracker.js?v=2" defer></script>
+  <script src="/static/tracker.js?v=3" defer></script>
 </body>
 </html>

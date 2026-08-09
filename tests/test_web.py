@@ -16,10 +16,11 @@ def test_health() -> None:
 def test_home_explains_product_and_board() -> None:
     response = client.get("/")
     assert response.status_code == 200
-    assert "Turn applications into momentum" in response.text
-    assert "Capture the role" in response.text
-    assert "Attach what you sent" in response.text
-    assert 'href="/static/app.css?v=7"' in response.text
+    assert "Choose what you need today" in response.text
+    assert "Free AI review" in response.text
+    assert "Private workspace" in response.text
+    assert "Shared $5 monthly AI pool" in response.text
+    assert 'href="/static/app.css?v=8"' in response.text
 
 
 def test_tracker_page_has_board_funnel_and_fast_add() -> None:
@@ -29,7 +30,7 @@ def test_tracker_page_has_board_funnel_and_fast_add() -> None:
     assert "data-board" in response.text
     assert "data-application-dialog" in response.text
     assert "data-cv-dialog" in response.text
-    assert "$5.00" in response.text
+    assert "No in-app cap" in response.text
 
 
 def test_tracker_api_creates_moves_and_isolates_application() -> None:
@@ -87,10 +88,28 @@ def test_cv_version_upload_listing_download_and_attachment() -> None:
     assert application.json()["cv_version_id"] == version["id"]
 
 
-def test_ai_budget_endpoint_exposes_hard_limit() -> None:
+def test_member_ai_is_unrestricted_and_free_pool_has_hard_limit() -> None:
     payload = client.get("/api/ai/budget", headers={"x-advisory-user": "alice"}).json()
-    assert payload["limit_micro_usd"] == 5_000_000
-    assert payload["remaining_micro_usd"] <= payload["limit_micro_usd"]
+    assert payload == {"unlimited": True}
+    free_payload = client.get("/api/free-ai/budget").json()
+    assert free_payload["limit_micro_usd"] == 5_000_000
+    assert free_payload["remaining_micro_usd"] <= free_payload["limit_micro_usd"]
+
+
+def test_admin_page_and_development_session() -> None:
+    page = client.get("/admin")
+    assert page.status_code == 200
+    assert "Control who gets in" in page.text
+    session = client.get("/api/session").json()
+    assert session == {"email": "carlosan.1708@gmail.com", "access": "approved", "role": "admin"}
+
+
+def test_non_admin_cannot_list_access_records() -> None:
+    response = client.get(
+        "/api/admin/access",
+        headers={"x-advisory-user": "alice", "x-advisory-email": "alice@example.com"},
+    )
+    assert response.status_code == 403
 
 
 def test_application_ai_review_requires_cv_and_job_then_persists_summary() -> None:

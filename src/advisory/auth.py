@@ -18,7 +18,10 @@ class IdentityVerifier:
 
     def verify(self, request: Request) -> UserIdentity:
         if self.mode == "development":
-            return UserIdentity(request.headers.get("x-advisory-user", "preview-user"))
+            return UserIdentity(
+                request.headers.get("x-advisory-user", "preview-user"),
+                request.headers.get("x-advisory-email", "carlosan.1708@gmail.com"),
+            )
         authorization = request.headers.get("authorization", "")
         if not authorization.startswith("Bearer "):
             raise HTTPException(status_code=401, detail="Sign in with Google to continue")

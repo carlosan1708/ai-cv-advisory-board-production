@@ -117,3 +117,35 @@ class BudgetedAiService:
             self.ledger.release(reservation)
             emit("gemini.request.failed", user_id=owner_id, model=self.pricing.model)
             raise
+
+
+class UnrestrictedAiService:
+    """Runs AI for approved members without a product-level spending rejection."""
+
+    def __init__(self, reviewer: AiReviewer, *, pricing: Pricing | None = None) -> None:
+        self.reviewer = reviewer
+        self.pricing = pricing or Pricing()
+
+    def review(self, owner_id: str, cv_text: str, job_text: str) -> EvidenceReview:
+        started = monotonic()
+        try:
+            review, input_tokens, output_tokens = self.reviewer.review(cv_text, job_text)
+            emit(
+                "gemini.request.completed",
+                user_id=owner_id,
+                access_tier="approved",
+                model=self.pricing.model,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                actual_micro_usd=self.pricing.cost(input_tokens, output_tokens),
+                duration_ms=round((monotonic() - started) * 1_000),
+            )
+            return review
+        except Exception:
+            emit(
+                "gemini.request.failed",
+                user_id=owner_id,
+                access_tier="approved",
+                model=self.pricing.model,
+            )
+            raise

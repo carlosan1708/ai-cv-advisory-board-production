@@ -2,6 +2,8 @@
 
 A spec-first reconstruction of the AI CV Advisory Board. The repository is intended to demonstrate not only a product, but a repeatable engineering process: explicit requirements, architectural decisions, threat modeling, deterministic evaluation, automated tests, observability, and browser-level regression evidence.
 
+The product has two access tiers: a no-login, session-only Gemini review backed by one shared monthly USD 5 hard cap, and an administrator-approved private workspace whose members have no in-app AI usage restriction. See [Spec 008](docs/specs/008-tiered-access.md).
+
 ## Current vertical slice
 
 - Track applications in an interactive Interested → Applied → Interviewing → Offer → Closed pipeline.

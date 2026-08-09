@@ -2,7 +2,13 @@ from types import SimpleNamespace
 
 import pytest
 
-from advisory.ai import BudgetedAiService, DeterministicAiReviewer, EvidenceReview, GeminiAiReviewer
+from advisory.ai import (
+    BudgetedAiService,
+    DeterministicAiReviewer,
+    EvidenceReview,
+    GeminiAiReviewer,
+    UnrestrictedAiService,
+)
 from advisory.budget import BudgetExceededError, InMemoryBudgetLedger, Pricing
 
 
@@ -94,3 +100,20 @@ def test_gemini_adapter_requests_strict_bounded_json() -> None:
     config = captured["config"]
     assert config.max_output_tokens == 1_024  # type: ignore[union-attr]
     assert config.response_mime_type == "application/json"  # type: ignore[union-attr]
+
+
+def test_unrestricted_service_calls_reviewer_without_a_ledger() -> None:
+    expected = EvidenceReview(
+        fit_score=92,
+        summary="Grounded",
+        supported_strengths=["Python"],
+        evidence_gaps=[],
+        next_actions=["Verify evidence"],
+    )
+
+    class Reviewer:
+        def review(self, cv_text: str, job_text: str) -> tuple[EvidenceReview, int, int]:
+            assert (cv_text, job_text) == ("CV", "JOB")
+            return expected, 20, 5
+
+    assert UnrestrictedAiService(Reviewer()).review("member", "CV", "JOB") == expected

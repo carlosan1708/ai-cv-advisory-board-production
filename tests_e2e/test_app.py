@@ -21,17 +21,17 @@ def open_job_step(page: Page, tmp_path: Path) -> None:
     page.get_by_role("button", name="Continue to job").click()
 
 
-def test_home_is_quiet_pipeline_first_and_opens_tracker(page: Page) -> None:
+def test_home_presents_free_and_private_modes(page: Page) -> None:
     page.set_viewport_size({"width": 1440, "height": 900})
     page.goto(BASE_URL)
-    expect(page.get_by_role("heading", name="Turn applications into momentum.")).to_be_visible()
-    expect(page.get_by_role("heading", name="Capture the role")).to_be_visible()
-    expect(page.get_by_role("heading", name="Attach what you sent")).to_be_visible()
-    expect(page.get_by_role("heading", name="Move the next step")).to_be_visible()
-    assert page.locator('link[rel="stylesheet"]').get_attribute("href") == "/static/app.css?v=7"
-    assert page.evaluate("getComputedStyle(document.body).backgroundColor") == "rgb(247, 247, 244)"
-    assert page.evaluate("document.documentElement.scrollHeight <= window.innerHeight + 1") is True
-    page.get_by_test_id("get-started-button").click()
+    expect(page.get_by_role("heading", name="Choose what you need today.")).to_be_visible()
+    expect(page.get_by_role("heading", name="Check one CV against one job.")).to_be_visible()
+    expect(page.get_by_role("heading", name="Run your full application pipeline.")).to_be_visible()
+    expect(page.get_by_text("Shared $5 monthly AI pool", exact=False)).to_be_visible()
+    expect(page.get_by_text("no in-app AI usage cap", exact=False)).to_be_visible()
+    assert page.locator('link[rel="stylesheet"]').get_attribute("href") == "/static/app.css?v=8"
+    assert page.evaluate("getComputedStyle(document.body).backgroundColor") == "rgb(244, 243, 239)"
+    page.get_by_test_id("member-mode-button").click()
     expect(page).to_have_url(f"{BASE_URL}/tracker")
     expect(page.get_by_role("heading", name="Keep every opportunity moving.")).to_be_visible()
 
@@ -197,7 +197,7 @@ def test_primary_flows_have_clean_browser_console(page: Page, tmp_path: Path) ->
 
     page.on("console", collect_console_message)
     page.goto(BASE_URL)
-    page.get_by_test_id("review-button").click()
+    page.get_by_test_id("free-mode-button").click()
     upload_text_cv(page, tmp_path)
     page.get_by_role("button", name="Continue to job").click()
     page.get_by_text("Paste the job description instead", exact=False).click()

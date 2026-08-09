@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     repository_backend: Literal["memory", "firestore"] = "memory"
     auth_mode: Literal["development", "google"] = "development"
     google_oauth_client_id: str = ""
+    admin_emails: str = "carlosan.1708@gmail.com"
     gcp_project: str = "ai-cv-advisory-board"
     gcp_location: str = "global"
     cv_bucket: str = "ai-cv-advisory-board-production-cvs"

@@ -9,9 +9,23 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.concurrency import run_in_threadpool
 
-from advisory.ai import AiReviewer, BudgetedAiService, DeterministicAiReviewer, GeminiAiReviewer
-from advisory.auth import IdentityVerifier
-from advisory.budget import BudgetLedger, InMemoryBudgetLedger
+from advisory.access import (
+    AccessControl,
+    AccessDecision,
+    AccessInvite,
+    FirestoreAccessControl,
+    InMemoryAccessControl,
+)
+from advisory.ai import (
+    AiReviewer,
+    BudgetedAiService,
+    DeterministicAiReviewer,
+    EvidenceReview,
+    GeminiAiReviewer,
+    UnrestrictedAiService,
+)
+from advisory.auth import IdentityVerifier, UserIdentity
+from advisory.budget import BudgetExceededError, BudgetLedger, InMemoryBudgetLedger
 from advisory.career import ApplicationCreate, ApplicationUpdate
 from advisory.career_repository import CareerRepository, InMemoryCareerRepository, NotFoundError
 from advisory.demo import DEMO_CV, DEMO_JOB
@@ -34,18 +48,27 @@ app = FastAPI(title=settings.app_name, version="0.1.0")
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 templates = Jinja2Templates(directory=BASE_DIR / "templates")
 identity_verifier = IdentityVerifier(settings.auth_mode, settings.google_oauth_client_id)
+admin_emails = {email.strip().casefold() for email in settings.admin_emails.split(",") if email.strip()}
 if settings.repository_backend == "firestore":
     career_repository: CareerRepository = GoogleCareerRepository(settings.gcp_project, settings.cv_bucket)
-    budget_ledger: BudgetLedger = FirestoreBudgetLedger(
+    free_budget_ledger: BudgetLedger = FirestoreBudgetLedger(
         settings.gcp_project, settings.ai_monthly_limit_micro_usd
     )
+    access_control: AccessControl = FirestoreAccessControl(settings.gcp_project, admin_emails)
 else:
     career_repository = InMemoryCareerRepository()
-    budget_ledger = InMemoryBudgetLedger(settings.ai_monthly_limit_micro_usd)
+    free_budget_ledger = InMemoryBudgetLedger(settings.ai_monthly_limit_micro_usd)
+    access_control = InMemoryAccessControl(admin_emails, allow_all=settings.auth_mode == "development")
 
 
 def owner_id(request: Request) -> str:
-    return identity_verifier.verify(request).subject
+    identity = identity_verifier.verify(request)
+    access_control.require_access(identity)
+    return identity.subject
+
+
+def identity(request: Request) -> UserIdentity:
+    return identity_verifier.verify(request)
 
 
 def service() -> AssessmentService:
@@ -70,7 +93,7 @@ def tracker_service() -> TrackerService:
     return TrackerService(career_repository, cv_document_parser())
 
 
-def ai_service() -> BudgetedAiService:
+def ai_reviewer() -> AiReviewer:
     reviewer: AiReviewer
     if settings.environment == "production":
         reviewer = GeminiAiReviewer(
@@ -80,7 +103,25 @@ def ai_service() -> BudgetedAiService:
         )
     else:
         reviewer = DeterministicAiReviewer()
-    return BudgetedAiService(reviewer, budget_ledger)
+    return reviewer
+
+
+def free_ai_service() -> BudgetedAiService:
+    return BudgetedAiService(ai_reviewer(), free_budget_ledger)
+
+
+def member_ai_service() -> UnrestrictedAiService:
+    return UnrestrictedAiService(ai_reviewer())
+
+
+def free_budget() -> dict[str, int]:
+    snapshot = free_budget_ledger.snapshot("anonymous-free-tier")
+    return {
+        "limit_micro_usd": snapshot.limit_micro_usd,
+        "used_micro_usd": snapshot.used_micro_usd,
+        "reserved_micro_usd": snapshot.reserved_micro_usd,
+        "remaining_micro_usd": snapshot.remaining_micro_usd,
+    }
 
 
 def render(
@@ -94,6 +135,8 @@ def render(
     error_stage: int = 0,
     run_id: str = "",
     assessment: Assessment | None = None,
+    ai_review: EvidenceReview | None = None,
+    ai_notice: str = "",
     status_code: int = 200,
 ) -> HTMLResponse:
     assessment_json = json.dumps(assessment.model_dump(), indent=2) if assessment else ""
@@ -110,6 +153,9 @@ def render(
             "run_id": run_id,
             "assessment": assessment,
             "assessment_json": assessment_json,
+            "ai_review": ai_review,
+            "ai_notice": ai_notice,
+            "free_budget": free_budget(),
         },
         status_code=status_code,
     )
@@ -123,7 +169,14 @@ def health() -> dict[str, str]:
 
 @app.get("/", response_class=HTMLResponse)
 def home(request: Request) -> HTMLResponse:
-    return templates.TemplateResponse(request=request, name="welcome.html")
+    return templates.TemplateResponse(
+        request=request,
+        name="welcome.html",
+        context={
+            "auth_mode": settings.auth_mode,
+            "google_oauth_client_id": settings.google_oauth_client_id,
+        },
+    )
 
 
 @app.get("/tracker", response_class=HTMLResponse)
@@ -137,6 +190,57 @@ def tracker(request: Request) -> HTMLResponse:
             "google_oauth_client_id": settings.google_oauth_client_id,
         },
     )
+
+
+@app.get("/admin", response_class=HTMLResponse)
+def admin(request: Request) -> HTMLResponse:
+    return templates.TemplateResponse(
+        request=request,
+        name="admin.html",
+        context={
+            "auth_mode": settings.auth_mode,
+            "google_oauth_client_id": settings.google_oauth_client_id,
+        },
+    )
+
+
+@app.get("/api/session")
+def session(request: Request) -> dict[str, object]:
+    user = identity(request)
+    record = access_control.status(user)
+    return {
+        "email": user.email,
+        "access": record.status,
+        "role": record.role if record.status == "approved" else "none",
+    }
+
+
+@app.post("/api/access-request", status_code=201)
+def request_workspace_access(request: Request) -> dict[str, object]:
+    user = identity(request)
+    record = access_control.request_access(user)
+    emit("access.requested", user_id=user.subject, access_id=record.id)
+    return record.model_dump(mode="json")
+
+
+@app.get("/api/admin/access")
+def list_workspace_access(request: Request) -> list[dict[str, object]]:
+    records = access_control.list_records(identity(request))
+    return [record.model_dump(mode="json") for record in records]
+
+
+@app.post("/api/admin/access", status_code=201)
+def approve_workspace_email(request: Request, payload: AccessInvite) -> dict[str, object]:
+    record = access_control.approve_email(identity(request), payload.email)
+    emit("access.approved", access_id=record.id)
+    return record.model_dump(mode="json")
+
+
+@app.patch("/api/admin/access/{record_id}")
+def decide_workspace_access(request: Request, record_id: str, payload: AccessDecision) -> dict[str, object]:
+    record = access_control.decide(identity(request), record_id, payload.status)
+    emit("access.decided", access_id=record.id, status=record.status)
+    return record.model_dump(mode="json")
 
 
 @app.get("/api/applications")
@@ -208,14 +312,14 @@ def download_cv_version(request: Request, cv_version_id: str) -> Response:
 
 
 @app.get("/api/ai/budget")
-def ai_budget(request: Request) -> dict[str, int]:
-    snapshot = budget_ledger.snapshot(owner_id(request))
-    return {
-        "limit_micro_usd": snapshot.limit_micro_usd,
-        "used_micro_usd": snapshot.used_micro_usd,
-        "reserved_micro_usd": snapshot.reserved_micro_usd,
-        "remaining_micro_usd": snapshot.remaining_micro_usd,
-    }
+def ai_budget(request: Request) -> dict[str, bool]:
+    owner_id(request)
+    return {"unlimited": True}
+
+
+@app.get("/api/free-ai/budget")
+def free_ai_budget() -> dict[str, int]:
+    return free_budget()
 
 
 @app.post("/api/applications/{application_id}/ai-review")
@@ -238,7 +342,7 @@ async def application_ai_review(
     if not resolved_job:
         raise HTTPException(status_code=422, detail="Add a job description or public job link first")
     review = await run_in_threadpool(
-        ai_service().review,
+        member_ai_service().review,
         owner_id(request),
         version.extracted_text,
         resolved_job,
@@ -248,7 +352,7 @@ async def application_ai_review(
         application_id,
         ApplicationUpdate(fit_score=review.fit_score, ai_summary=review.summary),
     )
-    return {"review": review.model_dump(), "budget": ai_budget(request)}
+    return {"review": review.model_dump(), "unlimited": True}
 
 
 @app.get("/workspace", response_class=HTMLResponse)
@@ -360,6 +464,26 @@ async def analyze(
             error_stage=error_stage,
             status_code=422,
         )
+    ai_review: EvidenceReview | None = None
+    ai_notice = ""
+    try:
+        ai_review = await run_in_threadpool(
+            free_ai_service().review,
+            "anonymous-free-tier",
+            resolved_cv,
+            resolved_job,
+        )
+    except BudgetExceededError:
+        ai_notice = (
+            "The shared free AI pool has reached its monthly $5 limit. "
+            "The evidence review below still works without a model call."
+        )
+        emit("gemini.free_pool.exhausted")
+    except Exception as exc:
+        ai_notice = (
+            "Gemini is temporarily unavailable. The evidence review below was completed without a model call."
+        )
+        emit("gemini.free_pool.fallback", error_type=type(exc).__name__)
     return render(
         request,
         cv_text=resolved_cv,
@@ -368,6 +492,8 @@ async def analyze(
         job_url=job_url,
         run_id=run_id,
         assessment=assessment,
+        ai_review=ai_review,
+        ai_notice=ai_notice,
     )
 
 

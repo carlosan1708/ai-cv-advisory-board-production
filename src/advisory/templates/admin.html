@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Workspace access | AI CV Advisory Board</title>
+  <link rel="stylesheet" href="/static/app.css?v=8"><link rel="stylesheet" href="/static/admin.css?v=1">
+  {% if auth_mode == "google" %}<script src="https://accounts.google.com/gsi/client" async defer></script>{% endif %}
+</head>
+<body class="admin-page" data-auth-mode="{{ auth_mode }}" data-client-id="{{ google_oauth_client_id }}">
+  <div class="admin-auth" data-admin-auth {% if auth_mode != "google" %}hidden{% endif %}><div><span class="overline">Administrator</span><h1>Sign in to manage access.</h1><p>Only the configured workspace administrator can approve members.</p><div data-google-signin></div><small data-auth-error></small></div></div>
+  <header class="app-header shell"><a class="brand" href="/"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span><span class="brand-copy"><strong>AI CV</strong><small>Access control</small></span></a><a class="button button-secondary button-small" href="/tracker">Back to pipeline</a></header>
+  <main class="admin-shell shell" data-admin-content>
+    <section class="admin-heading"><div><span class="overline">Private workspace</span><h1>Control who gets in.</h1><p>Pre-approve an email, or decide requests after someone signs in. Approved members have no in-app AI usage cap.</p></div></section>
+    <section class="invite-panel"><div><h2>Approve an email</h2><p>The user can enter immediately after signing in with this Google account.</p></div><form data-invite-form><input type="email" name="email" required placeholder="person@example.com" aria-label="Email to approve"><button class="button button-primary" type="submit">Approve user</button></form><small data-invite-error></small></section>
+    <section class="access-list-section"><div class="list-heading"><div><span class="overline">Members and requests</span><h2>Workspace access</h2></div><button class="text-action as-button" type="button" data-refresh>Refresh</button></div><div class="access-list" data-access-list></div><div class="admin-empty" data-admin-empty hidden>No access requests yet. You can pre-approve an email above.</div></section>
+  </main>
+  <template id="access-row"><article class="access-row"><div><strong data-email></strong><small data-subject></small></div><span class="access-status" data-status></span><div class="access-actions"><button type="button" data-approve>Approve</button><button type="button" data-reject>Reject</button></div></article></template>
+  <script src="/static/admin.js?v=1" defer></script>
+</body></html>

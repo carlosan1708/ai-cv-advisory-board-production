@@ -13,7 +13,8 @@
     const response = await fetch(url, options);
     if (!response.ok) {
       const payload = await response.json().catch(() => ({}));
-      throw new Error(payload.detail || "Something went wrong. Try again.");
+      const detail = payload.detail;
+      throw new Error((typeof detail === "object" ? detail.message : detail) || "Something went wrong. Try again.");
     }
     return response.json();
   }
@@ -41,7 +42,6 @@
       try {
         const result = await api(`/api/applications/${application.id}/ai-review`, { method: "POST", body: new FormData() });
         application.fit_score = result.review.fit_score; application.ai_summary = result.review.summary;
-        document.querySelector("[data-budget] strong").textContent = `$${(result.budget.used_micro_usd / 1e6).toFixed(2)} / $${(result.budget.limit_micro_usd / 1e6).toFixed(2)}`;
         render();
       } catch (error) { aiButton.disabled = false; aiButton.textContent = error.message; }
     });
@@ -142,9 +142,8 @@
   document.querySelector("[data-clear-filter]").addEventListener("click", () => { state.filter = "all"; render(); });
   document.querySelector("[data-mobile-filter]").addEventListener("change", (event) => { state.filter = event.target.value; render(); });
 
-  function start() { Promise.all([api("/api/applications"), api("/api/cv-versions"), api("/api/ai/budget")]).then(([applications, cvs, budget]) => {
+  function start() { Promise.all([api("/api/applications"), api("/api/cv-versions")]).then(([applications, cvs]) => {
     state.applications = applications; state.cvs = cvs;
-    document.querySelector("[data-budget] strong").textContent = `$${(budget.used_micro_usd / 1e6).toFixed(2)} / $${(budget.limit_micro_usd / 1e6).toFixed(2)}`;
     renderCvLibrary(); render();
   }).catch((error) => { empty.querySelector("p").textContent = error.message; }); }
 
@@ -156,8 +155,30 @@
       authGate.querySelector("[data-auth-error]").textContent = "Google sign-in could not be loaded.";
       return;
     }
-    google.accounts.id.initialize({ client_id: clientId, callback: (response) => {
-      authToken = response.credential; authGate.hidden = true; start();
+    google.accounts.id.initialize({ client_id: clientId, callback: async (response) => {
+      authToken = response.credential;
+      const errorNode = authGate.querySelector("[data-auth-error]");
+      errorNode.textContent = "";
+      try {
+        const session = await api("/api/session");
+        if (session.access === "approved") {
+          authGate.hidden = true;
+          document.querySelector("[data-admin-link]").hidden = session.role !== "admin";
+          start();
+          return;
+        }
+        const stateNode = authGate.querySelector("[data-access-state]");
+        stateNode.hidden = false;
+        stateNode.querySelector("[data-access-title]").textContent = session.access === "rejected" ? "Access was not approved" : "Approval is required";
+        stateNode.querySelector("[data-access-copy]").textContent = session.access === "rejected" ? "Contact the administrator if you believe this is a mistake." : "Send a request to the administrator. Your private workspace stays locked until approval.";
+        const requestButton = stateNode.querySelector("[data-request-access]");
+        requestButton.hidden = session.access === "rejected";
+        requestButton.onclick = async () => {
+          requestButton.disabled = true;
+          try { await api("/api/access-request", { method: "POST" }); requestButton.textContent = "Request sent"; }
+          catch (error) { requestButton.disabled = false; errorNode.textContent = error.message; }
+        };
+      } catch (error) { errorNode.textContent = error.message; }
     }});
     google.accounts.id.renderButton(authGate.querySelector("[data-google-signin]"), { theme: "outline", size: "large", shape: "rectangular" });
   });

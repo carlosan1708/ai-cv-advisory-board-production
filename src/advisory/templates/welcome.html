@@ -4,57 +4,62 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>AI CV Advisory Board</title>
-  <meta name="description" content="Track applications, the exact CV you sent, and every next step.">
-  <link rel="stylesheet" href="/static/app.css?v=7">
+  <meta name="description" content="Get a free AI CV review or manage your private application pipeline.">
+  <link rel="stylesheet" href="/static/app.css?v=8">
 </head>
-<body class="welcome-page simple-welcome-page">
-  <header class="app-header">
+<body class="mode-welcome-page">
+  <header class="app-header shell">
     <a class="brand" href="/" aria-label="AI CV Advisory Board home">
       <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>
       <span class="brand-copy"><strong>AI CV</strong><small>Advisory Board</small></span>
     </a>
-    <div class="header-nav">
-      <a href="/workspace">Evidence review</a>
-      <a class="button button-primary button-small" href="/tracker" data-testid="header-start-button">Open workspace</a>
-    </div>
+    <span class="privacy-status"><i aria-hidden="true"></i> Evidence before claims</span>
   </header>
 
-  <main class="welcome-simple shell">
-    <section class="welcome-intro" aria-labelledby="welcome-title">
-      <span class="overline">Your career workspace</span>
-      <h1 id="welcome-title">Turn applications into momentum.</h1>
-      <p>Keep every role, next step, and CV version in one calm workspace. Use evidence-led AI when it helps—not as another thing to manage.</p>
-      <div class="hero-actions welcome-actions">
-        <a class="button button-primary" href="/tracker" data-testid="get-started-button">Open your pipeline <span aria-hidden="true">&rarr;</span></a>
-        <a class="button button-secondary" href="/workspace" data-testid="review-button">Review a CV against a job</a>
-      </div>
+  <main class="mode-welcome shell">
+    <section class="mode-intro" aria-labelledby="welcome-title">
+      <span class="overline">Two focused ways to work</span>
+      <h1 id="welcome-title">Choose what you need today.</h1>
+      <p>Review one application without an account, or sign in to manage your complete job-search pipeline.</p>
     </section>
 
-    <section class="review-route" aria-label="How the workspace works">
-      <article>
-        <span class="route-number">1</span>
-        <div><h2>Capture the role</h2><p>Company and title are enough to begin. Add the posting when it is useful.</p></div>
+    <section class="mode-grid" aria-label="Choose a product mode">
+      <article class="mode-card free-mode-card">
+        <div class="mode-card-top"><span class="mode-icon" aria-hidden="true">01</span><span class="mode-badge">No account</span></div>
+        <div>
+          <span class="overline">Free AI review</span>
+          <h2>Check one CV against one job.</h2>
+          <p>Upload a PDF or TXT CV, add the public job link, and get a grounded Gemini review without creating an account.</p>
+        </div>
+        <ul>
+          <li>Real AI analysis with evidence safeguards</li>
+          <li>Session-only processing; nothing is saved</li>
+          <li>Shared $5 monthly AI pool with a reliable fallback</li>
+        </ul>
+        <a class="button button-primary" href="/workspace" data-testid="free-mode-button">Start a free AI review <span aria-hidden="true">&rarr;</span></a>
       </article>
-      <article>
-        <span class="route-number">2</span>
-        <div><h2>Attach what you sent</h2><p>Every application keeps the exact immutable CV version you used.</p></div>
-      </article>
-      <article>
-        <span class="route-number">3</span>
-        <div><h2>Move the next step</h2><p>Use the pipeline and funnel to see what needs your attention now.</p></div>
+
+      <article class="mode-card member-mode-card">
+        <div class="mode-card-top"><span class="mode-icon" aria-hidden="true">02</span><span class="mode-badge private">Admin approved</span></div>
+        <div>
+          <span class="overline">Private workspace</span>
+          <h2>Run your full application pipeline.</h2>
+          <p>Track roles on an interactive board, preserve every CV version, and request AI reviews whenever they help.</p>
+        </div>
+        <ul>
+          <li>Google identity and administrator-controlled access</li>
+          <li>Application funnel, kanban board, and immutable CVs</li>
+          <li>Approved members have no in-app AI usage cap</li>
+        </ul>
+        <a class="button button-dark" href="/tracker" data-testid="member-mode-button">Sign in to the workspace <span aria-hidden="true">&rarr;</span></a>
       </article>
     </section>
 
-    <aside class="welcome-limits" aria-label="Product privacy and scoring limitations">
-      <p><strong>AI stays optional.</strong> Tracking works without a model call, and the monthly per-user limit defaults to $5.</p>
-      <p><strong>Advice stays grounded.</strong> Suggested claims must point back to evidence in the CV you attached.</p>
-    </aside>
+    <p class="mode-footnote">AI can be wrong. Every recommendation should be verified against the source CV and job posting.</p>
   </main>
 
   <footer class="app-footer shell compact-footer">
-    <span>AI CV Advisory Board</span>
-    <span>Application tracking &middot; Immutable CV versions &middot; Evidence before claims</span>
-    <span>&copy; 2026</span>
+    <span>AI CV Advisory Board</span><span>Private by design &middot; Evidence-led AI</span><span>&copy; 2026</span>
   </footer>
 </body>
 </html>
