@@ -95,6 +95,7 @@ class Application(ApplicationCreate):
     owner_id: str
     fit_score: int | None = Field(default=None, ge=0, le=100)
     ai_summary: str = ""
+    archive_id: str | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -120,4 +121,20 @@ class CvVersion(BaseModel):
     sha256: str
     extracted_text: str
     parent_version_id: str | None = None
+    archive_id: str | None = None
     created_at: datetime
+
+
+class WorkspaceArchive(BaseModel):
+    id: str
+    owner_id: str
+    label: str = Field(min_length=1, max_length=120)
+    application_count: int = Field(ge=0)
+    cv_version_count: int = Field(ge=0)
+    created_at: datetime
+
+
+class WorkspaceArchiveDetail(BaseModel):
+    archive: WorkspaceArchive
+    applications: list[Application]
+    cv_versions: list[CvVersion]

@@ -112,6 +112,39 @@ def test_tracker_uploads_and_attaches_exact_cv_version(page: Page, tmp_path: Pat
     expect(page.get_by_text(f"CV · {version_label}")).to_be_visible()
 
 
+def test_workspace_can_be_archived_started_fresh_and_viewed(page: Page) -> None:
+    page.goto(f"{BASE_URL}/dashboard")
+    role = f"Archive test {uuid4().hex[:6]}"
+    archive_label = f"Search history {uuid4().hex[:6]}"
+    page.get_by_role("button", name="Add application", exact=True).first.click()
+    page.get_by_label("Company").fill("Archive Co")
+    page.get_by_label("Role").fill(role)
+    page.get_by_role("button", name="Add application", exact=True).last.click()
+    expect(page.get_by_role("heading", name=role)).to_be_visible()
+
+    page.get_by_role("button", name="Archive & start fresh").click()
+    archive_dialog = page.locator("[data-archive-dialog]")
+    expect(archive_dialog.locator("[data-archive-summary]")).to_contain_text("applications and")
+    archive_dialog.get_by_label("Archive name").fill(archive_label)
+    archive_dialog.get_by_label(
+        "I understand my active dashboard and CV library will become empty."
+    ).check()
+    archive_dialog.get_by_role("button", name="Archive and start fresh").click()
+
+    history_dialog = page.locator("[data-history-dialog]")
+    expect(history_dialog).to_be_visible()
+    history_row = history_dialog.locator("article").filter(has_text=archive_label)
+    expect(history_row).to_contain_text("applications")
+    history_row.get_by_role("button", name="View").click()
+    expect(history_dialog.get_by_text("Read-only archive")).to_be_visible()
+    expect(history_dialog.get_by_text(role, exact=True)).to_be_visible()
+    expect(history_dialog.get_by_text("Archive Co", exact=True)).to_be_visible()
+    history_dialog.get_by_role("button", name="Close").last.click()
+    expect(history_dialog).to_be_hidden()
+    expect(page.get_by_role("heading", name=role)).to_be_hidden()
+    expect(page.get_by_text("Your pipeline starts with one role.")).to_be_visible()
+
+
 def test_cv_upload_is_primary_and_text_is_a_collapsed_fallback(page: Page, tmp_path: Path) -> None:
     page.goto(f"{BASE_URL}/workspace")
     expect(page.get_by_test_id("cv-upload-zone")).to_be_visible()

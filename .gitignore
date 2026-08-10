@@ -2,6 +2,7 @@
 .venv/
 __pycache__/
 .pytest_cache/
+.tmp/
 .coverage
 htmlcov/
 playwright-report/
@@ -9,3 +10,4 @@ test-results/
 data/
 *.db
 *.egg-info/
+*.log

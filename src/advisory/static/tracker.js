@@ -1,7 +1,7 @@
 (() => {
   const statuses = ["interested", "applied", "interviewing", "offer", "closed"];
   const labels = { interested: "Interested", applied: "Applied", interviewing: "Interviewing", offer: "Offer", closed: "Closed" };
-  const state = { applications: [], cvs: [], filter: "all" };
+  const state = { applications: [], cvs: [], archives: [], filter: "all" };
   let authToken = "";
   const board = document.querySelector("[data-board]");
   const empty = document.querySelector("[data-empty]");
@@ -9,6 +9,8 @@
   const cvDialog = document.querySelector("[data-cv-dialog]");
   const applicationReviewDialog = document.querySelector("[data-application-review-dialog]");
   const expertDialog = document.querySelector("[data-expert-dialog]");
+  const archiveDialog = document.querySelector("[data-archive-dialog]");
+  const historyDialog = document.querySelector("[data-history-dialog]");
 
   async function api(url, options = {}) {
     options.headers = { ...(options.headers || {}), ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}) };
@@ -143,6 +145,90 @@
     state.applications.forEach((application) => applicationSelect.add(new Option(`${application.role} · ${application.company}`, application.id)));
   }
 
+  function renderHistory() {
+    const list = historyDialog.querySelector("[data-history-list]");
+    const emptyHistory = historyDialog.querySelector("[data-history-empty]");
+    historyDialog.querySelector("[data-history-index]").hidden = false;
+    historyDialog.querySelector("[data-history-detail]").hidden = true;
+    list.replaceChildren();
+    emptyHistory.hidden = state.archives.length > 0;
+    state.archives.forEach((archive) => {
+      const row = document.createElement("article");
+      const created = new Date(archive.created_at).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+      row.innerHTML = `<div><strong></strong><span></span><small></small></div><button class="button button-secondary button-small" type="button"></button>`;
+      row.querySelector("strong").textContent = archive.label;
+      row.querySelector("span").textContent = `${archive.application_count} applications · ${archive.cv_version_count} CV versions`;
+      row.querySelector("small").textContent = `Archived ${created}`;
+      const view = row.querySelector("button");
+      view.textContent = "View";
+      view.addEventListener("click", async () => {
+        view.disabled = true; view.textContent = "Opening…";
+        historyDialog.querySelector("[data-history-error]").textContent = "";
+        try { renderHistoryDetail(await api(`/api/workspace-archives/${archive.id}`)); }
+        catch (error) { historyDialog.querySelector("[data-history-error]").textContent = error.message; }
+        finally { view.disabled = false; view.textContent = "View"; }
+      });
+      list.append(row);
+    });
+  }
+
+  function addArchivedDownload(link, version, archiveId) {
+    link.href = `/api/workspace-archives/${archiveId}/cv-versions/${version.id}/download`;
+    if (!authToken) return;
+    link.addEventListener("click", async (event) => {
+      event.preventDefault();
+      const response = await fetch(link.href, { headers: { Authorization: `Bearer ${authToken}` } });
+      if (!response.ok) return;
+      const objectUrl = URL.createObjectURL(await response.blob());
+      const download = document.createElement("a");
+      download.href = objectUrl; download.download = version.filename; download.click();
+      URL.revokeObjectURL(objectUrl);
+    });
+  }
+
+  function renderHistoryDetail(detail) {
+    const archive = detail.archive;
+    const index = historyDialog.querySelector("[data-history-index]");
+    const panel = historyDialog.querySelector("[data-history-detail]");
+    const applications = panel.querySelector("[data-history-applications]");
+    const cvs = panel.querySelector("[data-history-cvs]");
+    const cvNames = new Map(detail.cv_versions.map((version) => [version.id, version.label]));
+    index.hidden = true; panel.hidden = false;
+    panel.querySelector("[data-history-title]").textContent = archive.label;
+    panel.querySelector("[data-history-meta]").textContent = `Archived ${new Date(archive.created_at).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })}`;
+    applications.replaceChildren();
+    detail.applications.forEach((application) => {
+      const row = document.createElement("article");
+      row.innerHTML = `<div><strong></strong><span></span><small></small></div><span class="history-status"></span>`;
+      row.querySelector("strong").textContent = application.role;
+      row.querySelector("div span").textContent = application.company;
+      const attachedCv = cvNames.get(application.cv_version_id);
+      row.querySelector("small").textContent = attachedCv ? `CV · ${attachedCv}` : "No CV attached";
+      row.querySelector(".history-status").textContent = labels[application.status] || application.status;
+      applications.append(row);
+    });
+    if (!detail.applications.length) applications.textContent = "No applications in this archive.";
+    cvs.replaceChildren();
+    detail.cv_versions.forEach((version) => {
+      const row = document.createElement("article");
+      row.innerHTML = `<div><strong></strong><span></span></div><a class="text-action">Download</a>`;
+      row.querySelector("strong").textContent = version.label;
+      row.querySelector("span").textContent = `${version.filename} · ${Math.ceil(version.byte_count / 1024)} KB`;
+      addArchivedDownload(row.querySelector("a"), version, archive.id);
+      cvs.append(row);
+    });
+    if (!detail.cv_versions.length) cvs.textContent = "No CV versions in this archive.";
+  }
+
+  async function openHistory(event) {
+    event?.preventDefault();
+    historyDialog.querySelector("[data-history-error]").textContent = "";
+    state.archives = await api("/api/workspace-archives");
+    renderHistory();
+    historyDialog.showModal();
+    history.replaceState(null, "", "#history");
+  }
+
   function renderExpertResult(review, scope) {
     const standalone = scope === "standalone";
     expertDialog.querySelector("[data-expert-score]").textContent = standalone ? review.quality_score : review.fit_score;
@@ -158,6 +244,20 @@
   document.querySelectorAll("[data-open-application]").forEach((button) => button.addEventListener("click", () => appDialog.showModal()));
   document.querySelectorAll("[data-open-cv]").forEach((button) => button.addEventListener("click", () => cvDialog.showModal()));
   document.querySelectorAll("[data-open-expert-panel]").forEach((button) => button.addEventListener("click", () => { populateExpertPanel(); expertDialog.querySelector("[data-expert-result]").hidden = true; expertDialog.querySelector("[data-expert-error]").textContent = ""; expertDialog.showModal(); }));
+  document.querySelectorAll("[data-open-history]").forEach((button) => button.addEventListener("click", (event) => openHistory(event).catch((error) => window.alert(error.message))));
+  historyDialog.querySelector("[data-history-back]").addEventListener("click", renderHistory);
+  historyDialog.addEventListener("close", () => {
+    if (location.hash === "#history") history.replaceState(null, "", "/dashboard");
+  });
+  document.querySelectorAll("[data-open-archive]").forEach((button) => button.addEventListener("click", () => {
+    const total = state.applications.length + state.cvs.length;
+    archiveDialog.querySelector("[data-archive-summary]").textContent = total
+      ? `${state.applications.length} applications and ${state.cvs.length} CV versions will be archived.`
+      : "This workspace is already empty.";
+    archiveDialog.querySelector("button[type=submit]").disabled = total === 0;
+    archiveDialog.querySelector("[data-archive-error]").textContent = "";
+    archiveDialog.showModal();
+  }));
   document.querySelectorAll('.tracker-dialog button[value="cancel"]').forEach((button) => button.addEventListener("click", (event) => {
     event.preventDefault(); button.closest("dialog").close();
   }));
@@ -173,6 +273,29 @@
     event.preventDefault(); const form = event.currentTarget; document.querySelector("[data-cv-error]").textContent = "";
     try { state.cvs.unshift(await api("/api/cv-versions", { method: "POST", body: new FormData(form) })); form.reset(); renderCvLibrary(); render(); }
     catch (error) { document.querySelector("[data-cv-error]").textContent = error.message; }
+  });
+  archiveDialog.querySelector("[data-archive-form]").addEventListener("submit", async (event) => {
+    if (event.submitter?.value === "cancel") return;
+    event.preventDefault();
+    const form = event.currentTarget;
+    const button = event.submitter;
+    button.disabled = true; button.textContent = "Archiving…";
+    archiveDialog.querySelector("[data-archive-error]").textContent = "";
+    try {
+      await api("/api/workspace-archives", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ label: new FormData(form).get("label") }),
+      });
+      form.reset();
+      archiveDialog.close();
+      await refreshWorkspace();
+      await openHistory();
+    } catch (error) {
+      archiveDialog.querySelector("[data-archive-error]").textContent = error.message;
+    } finally {
+      button.disabled = false; button.textContent = "Archive and start fresh";
+    }
   });
   document.querySelector("[data-application-review-form]").addEventListener("submit", async (event) => {
     if (event.submitter?.value === "cancel") return;
@@ -208,9 +331,14 @@
   document.querySelector("[data-clear-filter]").addEventListener("click", () => { state.filter = "all"; render(); });
   document.querySelector("[data-mobile-filter]").addEventListener("change", (event) => { state.filter = event.target.value; render(); });
 
-  function start() { Promise.all([api("/api/applications"), api("/api/cv-versions")]).then(([applications, cvs]) => {
+  async function refreshWorkspace() {
+    const [applications, cvs] = await Promise.all([api("/api/applications"), api("/api/cv-versions")]);
     state.applications = applications; state.cvs = cvs;
     renderCvLibrary(); populateExpertPanel(); render();
+  }
+
+  function start() { refreshWorkspace().then(() => {
+    if (location.hash === "#history") openHistory().catch((error) => { empty.querySelector("p").textContent = error.message; });
   }).catch((error) => { empty.querySelector("p").textContent = error.message; }); }
 
   const authGate = document.querySelector("[data-auth-gate]");

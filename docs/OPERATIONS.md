@@ -41,6 +41,7 @@ The `advisory` logger emits one-line JSON events:
 | `security.access_denied` | route, method, 401/403 status | Authentication/authorization abuse |
 | `security.cross_site_blocked` | route, method, fetch metadata | Cross-site mutation attempts |
 | `security.ai_burst_blocked` | access tier | AI burst guard activations |
+| `workspace.archived/archive_viewed` | opaque owner/archive IDs and record counts | Read-only workspace-history lifecycle |
 
 The logging safety filter removes document text, filenames, credentials, prompts, and full URLs even when
 those fields are passed accidentally.

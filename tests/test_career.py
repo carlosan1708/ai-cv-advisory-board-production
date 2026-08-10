@@ -6,7 +6,10 @@ from pydantic import ValidationError
 
 from advisory.budget import BudgetExceededError, InMemoryBudgetLedger, Pricing
 from advisory.career import ApplicationCreate, ApplicationStatus, ApplicationUpdate
-from advisory.career_repository import InMemoryCareerRepository, NotFoundError
+from advisory.career_repository import (
+    InMemoryCareerRepository,
+    NotFoundError,
+)
 from advisory.ingestion import CvDocumentParser
 from advisory.tracker_service import TrackerService
 
@@ -72,6 +75,44 @@ def test_immutable_cv_version_can_be_attached_only_by_its_owner() -> None:
         service.create_cv_version(
             "owner-a", label=" ", filename="resume.txt", content_type="text/plain", content=content
         )
+
+
+def test_workspace_archive_clears_active_data_and_remains_viewable() -> None:
+    repository = InMemoryCareerRepository()
+    service = TrackerService(repository, CvDocumentParser(max_file_bytes=5_000, max_chars=30_000))
+    version = service.create_cv_version(
+        "owner-a",
+        label="Platform CV",
+        filename="resume.txt",
+        content_type="text/plain",
+        content=b"EXPERIENCE\nBuilt systems",
+    )
+    application = repository.create_application(
+        "owner-a",
+        ApplicationCreate(company="Acme", role="Engineer", cv_version_id=version.id),
+    )
+    archive = repository.archive_workspace("owner-a", "Summer search")
+    assert (archive.application_count, archive.cv_version_count) == (1, 1)
+    assert repository.list_applications("owner-a") == []
+    assert repository.list_cv_versions("owner-a") == []
+    with pytest.raises(NotFoundError):
+        repository.get_application("owner-a", application.id)
+    with pytest.raises(NotFoundError):
+        repository.update_application(
+            "owner-a", application.id, ApplicationUpdate(status=ApplicationStatus.OFFER)
+        )
+
+    detail = repository.get_workspace_archive("owner-a", archive.id)
+    assert detail.applications[0].id == application.id
+    assert detail.applications[0].cv_version_id == version.id
+    assert detail.cv_versions[0].id == version.id
+    assert repository.get_archived_cv_content(
+        "owner-a", archive.id, version.id
+    ).startswith(b"EXPERIENCE")
+    with pytest.raises(NotFoundError):
+        repository.get_workspace_archive("owner-b", archive.id)
+    with pytest.raises(NotFoundError):
+        repository.get_archived_cv_content("owner-b", archive.id, version.id)
 
 
 def test_pricing_uses_integer_micro_dollars() -> None:

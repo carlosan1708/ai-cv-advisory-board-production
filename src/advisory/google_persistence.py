@@ -3,8 +3,15 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from advisory.budget import BudgetExceededError, BudgetSnapshot, Reservation
-from advisory.career import Application, ApplicationCreate, ApplicationUpdate, CvVersion
-from advisory.career_repository import NotFoundError
+from advisory.career import (
+    Application,
+    ApplicationCreate,
+    ApplicationUpdate,
+    CvVersion,
+    WorkspaceArchive,
+    WorkspaceArchiveDetail,
+)
+from advisory.career_repository import EmptyWorkspaceError, NotFoundError
 
 
 class GoogleCareerRepository:
@@ -22,14 +29,21 @@ class GoogleCareerRepository:
 
     def list_applications(self, owner_id: str) -> list[Application]:
         documents = self._user(owner_id).collection("applications").stream()
-        applications = [Application.model_validate(document.to_dict()) for document in documents]
+        applications = [
+            item
+            for document in documents
+            if (item := Application.model_validate(document.to_dict())).archive_id is None
+        ]
         return sorted(applications, key=lambda item: item.updated_at, reverse=True)
 
     def get_application(self, owner_id: str, application_id: str) -> Application:
         snapshot = self._user(owner_id).collection("applications").document(application_id).get()
         if not snapshot.exists:
             raise NotFoundError("Application not found")
-        return Application.model_validate(snapshot.to_dict())
+        application = Application.model_validate(snapshot.to_dict())
+        if application.archive_id is not None:
+            raise NotFoundError("Application not found")
+        return application
 
     def create_application(self, owner_id: str, payload: ApplicationCreate) -> Application:
         if payload.cv_version_id:
@@ -56,14 +70,21 @@ class GoogleCareerRepository:
 
     def list_cv_versions(self, owner_id: str) -> list[CvVersion]:
         documents = self._user(owner_id).collection("cv_versions").stream()
-        versions = [CvVersion.model_validate(document.to_dict()) for document in documents]
+        versions = [
+            item
+            for document in documents
+            if (item := CvVersion.model_validate(document.to_dict())).archive_id is None
+        ]
         return sorted(versions, key=lambda item: item.created_at, reverse=True)
 
     def get_cv_version(self, owner_id: str, cv_version_id: str) -> CvVersion:
         snapshot = self._user(owner_id).collection("cv_versions").document(cv_version_id).get()
         if not snapshot.exists:
             raise NotFoundError("CV version not found")
-        return CvVersion.model_validate(snapshot.to_dict())
+        version = CvVersion.model_validate(snapshot.to_dict())
+        if version.archive_id is not None:
+            raise NotFoundError("CV version not found")
+        return version
 
     def create_cv_version(self, version: CvVersion, content: bytes) -> CvVersion:
         object_name = f"users/{version.owner_id}/cv-versions/{version.id}/{version.filename}"
@@ -81,6 +102,81 @@ class GoogleCareerRepository:
     def get_cv_content(self, owner_id: str, cv_version_id: str) -> bytes:
         version = self.get_cv_version(owner_id, cv_version_id)
         object_name = f"users/{owner_id}/cv-versions/{version.id}/{version.filename}"
+        return bytes(self.bucket.blob(object_name).download_as_bytes())
+
+    def list_workspace_archives(self, owner_id: str) -> list[WorkspaceArchive]:
+        documents = self._user(owner_id).collection("workspace_archives").stream()
+        archives = [WorkspaceArchive.model_validate(document.to_dict()) for document in documents]
+        return sorted(archives, key=lambda item: item.created_at, reverse=True)
+
+    def archive_workspace(self, owner_id: str, label: str) -> WorkspaceArchive:
+        cleaned_label = label.strip()
+        if not cleaned_label:
+            raise ValueError("Archive name must not be blank")
+        applications = self.list_applications(owner_id)
+        versions = self.list_cv_versions(owner_id)
+        if not applications and not versions:
+            raise EmptyWorkspaceError("The workspace is already empty")
+        if len(applications) + len(versions) > 450:
+            raise ValueError("A workspace archive can contain at most 450 records")
+        archive = WorkspaceArchive(
+            id=self._user(owner_id).collection("workspace_archives").document().id,
+            owner_id=owner_id,
+            label=cleaned_label,
+            application_count=len(applications),
+            cv_version_count=len(versions),
+            created_at=datetime.now(UTC),
+        )
+        batch = self.db.batch()
+        archive_ref = self._user(owner_id).collection("workspace_archives").document(archive.id)
+        batch.create(archive_ref, archive.model_dump(mode="json"))
+        for application in applications:
+            reference = self._user(owner_id).collection("applications").document(application.id)
+            batch.update(reference, {"archive_id": archive.id})
+        for version in versions:
+            reference = self._user(owner_id).collection("cv_versions").document(version.id)
+            batch.update(reference, {"archive_id": archive.id})
+        batch.commit()
+        return archive
+
+    def get_workspace_archive(
+        self, owner_id: str, archive_id: str
+    ) -> WorkspaceArchiveDetail:
+        archive_ref = self._user(owner_id).collection("workspace_archives").document(archive_id)
+        snapshot = archive_ref.get()
+        if not snapshot.exists:
+            raise NotFoundError("Workspace archive not found")
+        archive = WorkspaceArchive.model_validate(snapshot.to_dict())
+        applications = [
+            Application.model_validate(document.to_dict())
+            for document in self._user(owner_id).collection("applications").stream()
+            if (document.to_dict() or {}).get("archive_id") == archive_id
+        ]
+        versions = [
+            CvVersion.model_validate(document.to_dict())
+            for document in self._user(owner_id).collection("cv_versions").stream()
+            if (document.to_dict() or {}).get("archive_id") == archive_id
+        ]
+        return WorkspaceArchiveDetail(
+            archive=archive,
+            applications=sorted(applications, key=lambda item: item.updated_at, reverse=True),
+            cv_versions=sorted(versions, key=lambda item: item.created_at, reverse=True),
+        )
+
+    def get_archived_cv_content(
+        self, owner_id: str, archive_id: str, cv_version_id: str
+    ) -> bytes:
+        snapshot = self._user(owner_id).collection("cv_versions").document(cv_version_id).get()
+        if not snapshot.exists:
+            raise NotFoundError("Archived CV version not found")
+        metadata = snapshot.to_dict() or {}
+        version = CvVersion.model_validate(metadata)
+        if version.archive_id != archive_id:
+            raise NotFoundError("Archived CV version not found")
+        object_name = metadata.get(
+            "object_name",
+            f"users/{owner_id}/cv-versions/{version.id}/{version.filename}",
+        )
         return bytes(self.bucket.blob(object_name).download_as_bytes())
 
 

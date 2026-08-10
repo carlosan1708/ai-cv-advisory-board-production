@@ -33,7 +33,12 @@ from advisory.ai import (
 from advisory.auth import IdentityVerifier, UserIdentity
 from advisory.budget import BudgetExceededError, BudgetLedger, InMemoryBudgetLedger
 from advisory.career import ApplicationCreate, ApplicationUpdate
-from advisory.career_repository import CareerRepository, InMemoryCareerRepository, NotFoundError
+from advisory.career_repository import (
+    CareerRepository,
+    EmptyWorkspaceError,
+    InMemoryCareerRepository,
+    NotFoundError,
+)
 from advisory.demo import DEMO_CV, DEMO_JOB
 from advisory.domain import Assessment
 from advisory.google_persistence import FirestoreBudgetLedger, GoogleCareerRepository
@@ -144,6 +149,10 @@ def identity(request: Request) -> UserIdentity:
 
 class SessionCredential(BaseModel):
     credential: str
+
+
+class ArchiveWorkspaceRequest(BaseModel):
+    label: str
 
 
 def service() -> AssessmentService:
@@ -439,6 +448,67 @@ def update_application(
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     emit("application.updated", user_id=owner_id(request), application_id=item.id, status=item.status)
     return item.model_dump(mode="json")
+
+
+@app.get("/api/workspace-archives")
+def list_workspace_archives(request: Request) -> list[dict[str, object]]:
+    archives = career_repository.list_workspace_archives(owner_id(request))
+    return [item.model_dump(mode="json") for item in archives]
+
+
+@app.post("/api/workspace-archives", status_code=201)
+def archive_workspace(request: Request, payload: ArchiveWorkspaceRequest) -> dict[str, object]:
+    owner = owner_id(request)
+    try:
+        archive = career_repository.archive_workspace(owner, payload.label)
+    except (EmptyWorkspaceError, ValueError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    emit(
+        "workspace.archived",
+        user_id=owner,
+        archive_id=archive.id,
+        application_count=archive.application_count,
+        cv_version_count=archive.cv_version_count,
+    )
+    return archive.model_dump(mode="json")
+
+
+@app.get("/api/workspace-archives/{archive_id}")
+def get_workspace_archive(request: Request, archive_id: str) -> dict[str, object]:
+    owner = owner_id(request)
+    try:
+        detail = career_repository.get_workspace_archive(owner, archive_id)
+    except NotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    emit("workspace.archive_viewed", user_id=owner, archive_id=archive_id)
+    return {
+        "archive": detail.archive.model_dump(mode="json"),
+        "applications": [item.model_dump(mode="json") for item in detail.applications],
+        "cv_versions": [
+            item.model_dump(mode="json", exclude={"extracted_text"})
+            for item in detail.cv_versions
+        ],
+    }
+
+
+@app.get("/api/workspace-archives/{archive_id}/cv-versions/{cv_version_id}/download")
+def download_archived_cv_version(
+    request: Request, archive_id: str, cv_version_id: str
+) -> Response:
+    owner = owner_id(request)
+    try:
+        detail = career_repository.get_workspace_archive(owner, archive_id)
+        version = next(
+            item for item in detail.cv_versions if item.id == cv_version_id
+        )
+        content = career_repository.get_archived_cv_content(owner, archive_id, cv_version_id)
+    except (NotFoundError, StopIteration) as exc:
+        raise HTTPException(status_code=404, detail="Archived CV version not found") from exc
+    return Response(
+        content,
+        media_type=version.content_type,
+        headers={"Content-Disposition": f'attachment; filename="{version.filename}"'},
+    )
 
 
 @app.get("/api/cv-versions")

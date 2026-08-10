@@ -4,7 +4,7 @@
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
   <title>CV library | AI CV Advisory Board</title>
   <meta name="description" content="Review, revise, and preserve every CV version independently of applications.">
-  <link rel="stylesheet" href="/static/app.css?v=8"><link rel="stylesheet" href="/static/tracker.css?v=4"><link rel="stylesheet" href="/static/cvs.css?v=1">
+  <link rel="stylesheet" href="/static/app.css?v=8"><link rel="stylesheet" href="/static/tracker.css?v=5"><link rel="stylesheet" href="/static/cvs.css?v=1">
   {% if auth_mode == "google" %}<script src="https://accounts.google.com/gsi/client" async defer></script>{% endif %}
 </head>
 <body class="tracker-page cv-page">
@@ -13,7 +13,7 @@
   {% endif %}
   <header class="tracker-header workspace-header-nav">
     <a class="brand" href="/dashboard"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span><span class="brand-copy"><strong>AI CV</strong><small>Career workspace</small></span></a>
-    <nav aria-label="Workspace navigation"><a href="/dashboard">Dashboard</a><a class="active" href="/cvs">CV Library</a><a href="/admin" data-admin-link hidden>Access</a></nav>
+    <nav aria-label="Workspace navigation"><a href="/dashboard">Dashboard</a><a class="active" href="/cvs">CV Library</a><a href="/dashboard#history">History</a><a href="/admin" data-admin-link hidden>Access</a></nav>
     <button class="button button-primary button-small" type="button" data-open-upload>Upload CV</button>
   </header>
   <main class="cv-shell">
@@ -22,7 +22,7 @@
     <div class="cv-grid" data-cv-grid></div>
     <section class="cv-empty" data-cv-empty><span>CV</span><h2>Build your library once.</h2><p>Upload the CV you use today. You can review it without an application and create tailored versions later.</p><button class="button button-primary" type="button" data-open-upload>Upload your first CV</button></section>
   </main>
-  <nav class="mobile-workspace-nav" aria-label="Mobile workspace navigation"><a href="/dashboard">Dashboard</a><a class="active" href="/cvs">CVs</a><a href="/dashboard#ai-panel">AI Panel</a></nav>
+  <nav class="mobile-workspace-nav" aria-label="Mobile workspace navigation"><a href="/dashboard">Dashboard</a><a class="active" href="/cvs">CVs</a><a href="/dashboard#history">History</a></nav>
 
   <dialog class="tracker-dialog compact-dialog" data-upload-dialog><form method="dialog" data-upload-form enctype="multipart/form-data"><div class="dialog-heading"><div><span class="overline">New source document</span><h2>Upload a CV</h2></div><button class="icon-button" value="cancel" aria-label="Close">&times;</button></div><p class="dialog-lede">Give this file a meaningful label so it is easy to attach to an application later.</p><label>Version label <input name="label" maxlength="100" required placeholder="General AI engineering · August 2026"></label><label class="file-drop">CV file <input name="cv_file" type="file" accept=".pdf,.txt,application/pdf,text/plain" required><small>PDF or TXT · up to 5 MB</small></label><p class="form-error" data-upload-error role="alert"></p><div class="dialog-actions"><button class="button button-secondary" value="cancel">Cancel</button><button class="button button-primary" type="submit" value="default">Add to library</button></div></form></dialog>
 

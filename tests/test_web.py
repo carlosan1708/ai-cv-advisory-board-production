@@ -31,6 +31,8 @@ def test_tracker_page_has_board_funnel_and_fast_add() -> None:
     assert "data-board" in response.text
     assert "data-application-dialog" in response.text
     assert "data-cv-dialog" in response.text
+    assert "Archive &amp; start fresh" in response.text
+    assert "Past workspaces" in response.text
     assert "$10 per user" in response.text
     assert client.get("/dashboard").status_code == 200
 
@@ -129,6 +131,56 @@ def test_cv_can_be_reviewed_and_revised_without_an_application() -> None:
     assert revised.status_code == 201
     assert revised.json()["parent_version_id"] == original["id"]
     assert len(client.get("/api/cv-versions", headers=headers).json()) == 2
+
+
+def test_workspace_archive_api_is_read_only_owner_scoped_and_preserves_cv() -> None:
+    web.career_repository.clear()
+    headers = {"x-advisory-user": "archive-owner"}
+    other_headers = {"x-advisory-user": "other-owner"}
+    version = client.post(
+        "/api/cv-versions",
+        headers=headers,
+        data={"label": "Platform CV"},
+        files={"cv_file": ("resume.txt", b"EXPERIENCE\nBuilt systems", "text/plain")},
+    ).json()
+    application = client.post(
+        "/api/applications",
+        headers=headers,
+        json={"company": "Acme", "role": "Staff Engineer", "cv_version_id": version["id"]},
+    ).json()
+    archived = client.post(
+        "/api/workspace-archives", headers=headers, json={"label": "August search"}
+    )
+    assert archived.status_code == 201
+    archive = archived.json()
+    assert (archive["application_count"], archive["cv_version_count"]) == (1, 1)
+    assert client.get("/api/applications", headers=headers).json() == []
+    assert client.get("/api/cv-versions", headers=headers).json() == []
+    assert client.patch(
+        f"/api/applications/{application['id']}", headers=headers, json={"status": "offer"}
+    ).status_code == 404
+    assert client.get("/api/workspace-archives", headers=other_headers).json() == []
+    assert client.get(
+        f"/api/workspace-archives/{archive['id']}", headers=other_headers
+    ).status_code == 404
+
+    detail = client.get(f"/api/workspace-archives/{archive['id']}", headers=headers)
+    assert detail.status_code == 200
+    assert detail.json()["applications"][0]["id"] == application["id"]
+    assert detail.json()["applications"][0]["cv_version_id"] == version["id"]
+    assert detail.json()["cv_versions"][0]["label"] == "Platform CV"
+    assert "extracted_text" not in detail.json()["cv_versions"][0]
+    download_url = (
+        f"/api/workspace-archives/{archive['id']}/cv-versions/{version['id']}/download"
+    )
+    assert client.get(download_url, headers=headers).content.startswith(b"EXPERIENCE")
+    assert client.get(download_url, headers=other_headers).status_code == 404
+
+    current = client.post(
+        "/api/applications", headers=headers, json={"company": "Current", "role": "New role"}
+    ).json()
+    client.get(f"/api/workspace-archives/{archive['id']}", headers=headers)
+    assert client.get("/api/applications", headers=headers).json()[0]["id"] == current["id"]
 
 
 def test_member_and_free_ai_pools_have_hard_limits() -> None:
