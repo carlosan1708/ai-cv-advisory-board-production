@@ -278,7 +278,7 @@ def render(
     advisor_ids: list[str] | None = None,
     status_code: int = 200,
 ) -> HTMLResponse:
-    selected_advisor_ids = normalize_advisor_ids(advisor_ids)
+    selected_advisor_ids = normalize_advisor_ids([] if advisor_ids is None else advisor_ids)
     assessment_json = json.dumps(assessment.model_dump(), indent=2) if assessment else ""
     return templates.TemplateResponse(
         request=request,
@@ -780,6 +780,19 @@ async def analyze(
             advisor_ids=selected_advisor_ids,
             error="Add a public job link or paste the job description.",
             error_stage=2,
+            status_code=422,
+        )
+
+    if not selected_advisor_ids:
+        return render(
+            request,
+            cv_text=resolved_cv,
+            cv_filename=cv_filename,
+            job_text=resolved_job,
+            job_url=job_url,
+            advisor_ids=[],
+            error="Choose at least one specialist for your advisory board.",
+            error_stage=3,
             status_code=422,
         )
 

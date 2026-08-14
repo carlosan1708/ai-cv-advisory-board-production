@@ -16,7 +16,7 @@ The anonymous experience should feel like an advisory board, not a generic CV sc
 
 1. Upload a PDF/TXT CV or use the text fallback.
 2. Add an HTTPS job link or paste the description.
-3. Select one to three advisors from six clear professional lenses. Recruiter, Hiring Manager, and Technical Reviewer are preselected.
+3. Explicitly compose a panel of one to three advisors from six clear professional lenses. Nothing is preselected. Balanced, Builder, and Leadership presets are shortcuts that remain fully editable.
 4. Submit once and see an honest board-in-session progress state.
 5. Read the report in this order: consensus, specialist verdicts, tailoring plan, interview questions, deterministic baseline, evidence ledger, structured artifact.
 
@@ -32,6 +32,7 @@ The anonymous experience should feel like an advisory board, not a generic CV sc
 ## Security and grounding
 
 - The browser sends only allowlisted advisor IDs; the server ignores unknown and duplicate IDs.
+- An empty panel is rejected on both client and server; the server never silently substitutes a default panel.
 - User CV and job text remain untrusted prompt data and cannot select a system instruction or advisor prompt.
 - Model output is validated against bounded Pydantic schemas before rendering.
 - Tailoring moves may change emphasis, order, clarity, or wording but may never add unsupported experience.
@@ -41,6 +42,8 @@ The anonymous experience should feel like an advisory board, not a generic CV sc
 
 - The progress rail exposes CV, Job, Board, and Report.
 - Job validation succeeds before Board can open.
+- The panel starts empty and makes the user's choice explicit.
+- Balanced, Builder, and Leadership presets can be applied, adjusted, or cleared.
 - One to three advisor cards can be selected; a fourth cannot be selected.
 - The selected IDs survive validation errors and reach the reviewer in order.
 - Submitting replaces the form with a visible, accessible board progress state.

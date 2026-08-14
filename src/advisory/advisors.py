@@ -64,11 +64,12 @@ MAX_ADVISORS = 3
 
 def normalize_advisor_ids(raw_ids: list[str] | tuple[str, ...] | None) -> list[str]:
     normalized: list[str] = []
-    for raw_id in raw_ids or DEFAULT_ADVISOR_IDS:
+    source_ids = DEFAULT_ADVISOR_IDS if raw_ids is None else raw_ids
+    for raw_id in source_ids:
         advisor_id = raw_id.strip()
         if advisor_id in ADVISOR_BY_ID and advisor_id not in normalized:
             normalized.append(advisor_id)
-    return normalized[:MAX_ADVISORS] or list(DEFAULT_ADVISOR_IDS)
+    return normalized[:MAX_ADVISORS]
 
 
 def advisor_context(advisor_ids: list[str] | tuple[str, ...] | None = None) -> list[dict[str, str]]:

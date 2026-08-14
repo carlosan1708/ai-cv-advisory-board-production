@@ -19,6 +19,7 @@ def test_home_explains_product_and_board() -> None:
     assert "Choose what you need today" in response.text
     assert "Free AI review" in response.text
     assert "Private workspace" in response.text
+    assert "Choose your own 1–3 specialist advisory panel" in response.text
     assert "Shared $5 monthly AI pool" in response.text
     assert "Each approved member has a $10 monthly AI allowance" not in response.text
     assert 'href="/static/app.css?v=8"' in response.text
@@ -289,9 +290,13 @@ def test_workspace_starts_four_stage_advisory_board_review() -> None:
     assert "Job" in response.text
     assert "Board" in response.text
     assert "Report" in response.text
-    assert "Choose who reviews your application" in response.text
+    assert "Assemble your advisory board" in response.text
+    assert "Panel composition" in response.text
+    assert "No specialists selected yet" in response.text
     assert "Technical Recruiter" in response.text
-    assert 'src="/static/app.js?v=8"' in response.text
+    assert 'data-advisor-preset="recruiter,hiring_manager,technical"' in response.text
+    assert "data-advisor-option checked" not in response.text
+    assert 'src="/static/app.js?v=10"' in response.text
     assert 'enctype="multipart/form-data"' in response.text
 
 
@@ -321,7 +326,7 @@ def test_demo_renders_complete_board_finding() -> None:
     assert response.status_code == 200
     assert 'data-testid="results"' in response.text
     assert "Advisor lenses" in response.text
-    assert "Three perspectives, one decision" in response.text
+    assert "Your panel, one decision" in response.text
     assert "Safe, high-impact edits" in response.text
     assert "Questions to prepare" in response.text
     assert "Requirement by requirement" in response.text
@@ -335,6 +340,7 @@ def test_result_wording_changes_for_weak_match() -> None:
         data={
             "cv_text": "EXPERIENCE\nMaintained internal documentation",
             "job_text": "Kubernetes Terraform Python distributed systems leadership",
+            "advisor_ids": "recruiter,hiring_manager,technical",
         },
     )
     assert response.status_code == 200
@@ -352,7 +358,10 @@ def test_uploaded_cv_and_job_url_complete_review(monkeypatch: pytest.MonkeyPatch
     monkeypatch.setattr(web, "job_description_fetcher", lambda: FakeFetcher())
     response = client.post(
         "/analyze",
-        data={"job_url": "https://jobs.example/platform-engineer"},
+        data={
+            "job_url": "https://jobs.example/platform-engineer",
+            "advisor_ids": "recruiter,hiring_manager,technical",
+        },
         files={
             "cv_file": (
                 "Carlos-resume.txt",
@@ -395,6 +404,30 @@ def test_selected_advisors_reach_one_bounded_board_call(monkeypatch: pytest.Monk
     assert "Impact &amp; ROI Reviewer" in response.text
 
 
+def test_board_composition_is_required_server_side(monkeypatch: pytest.MonkeyPatch) -> None:
+    called = False
+
+    class UnexpectedBoardService:
+        def review(self, *_: object) -> web.EvidenceReview:
+            nonlocal called
+            called = True
+            raise AssertionError("AI must not run without a selected panel")
+
+    monkeypatch.setattr(web, "free_ai_service", lambda: UnexpectedBoardService())
+    response = client.post(
+        "/analyze",
+        data={
+            "cv_text": "EXPERIENCE\nBuilt Python platforms",
+            "job_text": "Python platform leadership",
+            "advisor_ids": "",
+        },
+    )
+    assert response.status_code == 422
+    assert "Choose at least one specialist for your advisory board" in response.text
+    assert "No specialists selected yet" in response.text
+    assert called is False
+
+
 def test_manual_job_description_takes_precedence_over_url(monkeypatch: pytest.MonkeyPatch) -> None:
     class UnexpectedFetcher:
         def fetch(self, _: str) -> str:
@@ -407,6 +440,7 @@ def test_manual_job_description_takes_precedence_over_url(monkeypatch: pytest.Mo
             "cv_text": "EXPERIENCE\nBuilt Python services",
             "job_url": "https://jobs.example/role",
             "job_text": "Python backend engineering",
+            "advisor_ids": "recruiter,hiring_manager,technical",
         },
     )
     assert response.status_code == 200
@@ -454,7 +488,11 @@ def test_job_url_error_preserves_cv_and_opens_manual_recovery(monkeypatch: pytes
 def test_user_evidence_is_html_escaped() -> None:
     response = client.post(
         "/analyze",
-        data={"cv_text": "EXPERIENCE\n<script>alert(1)</script>", "job_text": "script"},
+        data={
+            "cv_text": "EXPERIENCE\n<script>alert(1)</script>",
+            "job_text": "script",
+            "advisor_ids": "recruiter,hiring_manager,technical",
+        },
     )
     assert response.status_code == 200
     assert "<script>alert(1)</script>" not in response.text

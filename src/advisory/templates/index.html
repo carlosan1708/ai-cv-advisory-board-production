@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>AI Job Match | AI CV Advisory Board</title>
   <meta name="description" content="Compare a CV with a specific job using grounded AI.">
-  <link rel="stylesheet" href="/static/app.css?v=8">
-  <script src="/static/app.js?v=8" defer></script>
+  <link rel="stylesheet" href="/static/app.css?v=10">
+  <script src="/static/app.js?v=10" defer></script>
 </head>
 <body class="workspace-page{% if assessment %} has-results{% endif %}{% if error %} has-error{% endif %}">
   <header class="app-header workspace-header">
@@ -136,11 +136,24 @@
         <section class="review-panel {% if error_stage == 3 %}visible{% endif %}" data-step-panel="3" aria-labelledby="board-step-title">
           <div class="panel-heading board-panel-heading">
             <span class="stage-label">Stage 3 of 3</span>
-            <h2 id="board-step-title" tabindex="-1">Choose who reviews your application.</h2>
-            <p>Select up to three specialists. They deliberate in one bounded Gemini call, so a deeper report does not multiply AI cost.</p>
+            <h2 id="board-step-title" tabindex="-1">Assemble your advisory board.</h2>
+            <p>You decide the panel composition. Select individual specialists or start from a preset, then adjust it before the review.</p>
           </div>
 
-          <div class="board-selection-meta"><span><strong data-advisor-count>{{ selected_advisor_ids | length }}</strong> of 3 selected</span><small>Three balanced advisors are preselected</small></div>
+          <section class="board-composer" aria-labelledby="panel-composition-title">
+            <div class="board-composer-heading">
+              <div><span class="overline">Panel composition</span><h3 id="panel-composition-title">Build the panel you want</h3></div>
+              <span class="board-selection-count"><strong data-advisor-count>{{ selected_advisor_ids | length }}</strong> of 3 selected</span>
+            </div>
+            <div class="board-presets" aria-label="Panel presets">
+              <button type="button" data-advisor-preset="recruiter,hiring_manager,technical">Balanced</button>
+              <button type="button" data-advisor-preset="technical,impact,startup">Builder</button>
+              <button type="button" data-advisor-preset="hiring_manager,executive,impact">Leadership</button>
+              <button type="button" class="board-clear" data-advisor-clear disabled>Clear</button>
+            </div>
+            <div class="board-roster" data-advisor-summary aria-live="polite">No specialists selected yet.</div>
+            <p class="board-selection-guidance" data-advisor-guidance>Choose at least one specialist. You can mix any three roles.</p>
+          </section>
           <div class="advisor-picker" data-advisor-picker>
             {% for advisor in advisors %}
             <label class="advisor-option {% if advisor.id in selected_advisor_ids %}selected{% endif %}">
@@ -153,7 +166,7 @@
           </div>
           <p class="source-error" data-advisor-error role="alert" aria-live="polite"></p>
 
-          <div class="board-promise"><span aria-hidden="true">i</span><p><strong>One review, multiple perspectives.</strong> Your selected advisors share one evidence-grounded model response. No CV or job content is saved.</p></div>
+          <div class="board-promise"><span aria-hidden="true">i</span><p><strong>Your composition controls the review.</strong> Only the specialists selected above receive a finding. They share one evidence-grounded Gemini response, and no CV or job content is saved.</p></div>
           <div class="panel-actions">
             <button class="text-action as-button" type="button" data-previous-step="2">&larr; Back to job</button>
             <button class="button button-primary" type="submit" data-testid="analyze-button">Start board review <span aria-hidden="true">&rarr;</span></button>
@@ -193,7 +206,7 @@
 
         {% if ai_review.advisor_findings %}
         <section class="advisor-verdicts" aria-labelledby="advisor-verdicts-title">
-          <div class="result-section-heading"><div><span class="overline">Your selected specialists</span><h2 id="advisor-verdicts-title">Three perspectives, one decision</h2></div><p>Each finding must point back to CV evidence.</p></div>
+          <div class="result-section-heading"><div><span class="overline">Your selected specialists</span><h2 id="advisor-verdicts-title">Your panel, one decision</h2></div><p>Each selected specialist contributes one evidence-grounded finding.</p></div>
           <div class="advisor-verdict-grid">
             {% for finding in ai_review.advisor_findings %}
             {% set advisor = advisor_map.get(finding.advisor_id) %}

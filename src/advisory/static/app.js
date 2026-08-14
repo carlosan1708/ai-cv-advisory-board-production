@@ -17,6 +17,10 @@
   const advisorIds = document.querySelector("[data-advisor-ids]");
   const advisorCount = document.querySelector("[data-advisor-count]");
   const advisorError = document.querySelector("[data-advisor-error]");
+  const advisorSummary = document.querySelector("[data-advisor-summary]");
+  const advisorGuidance = document.querySelector("[data-advisor-guidance]");
+  const advisorPresetButtons = [...document.querySelectorAll("[data-advisor-preset]")];
+  const advisorClearButton = document.querySelector("[data-advisor-clear]");
   const analysisOverlay = document.querySelector("[data-analysis-overlay]");
   const maximumFileSize = 5 * 1024 * 1024;
 
@@ -68,6 +72,7 @@
     const stepNumber = Number(step);
     panels.forEach((panel) => panel.classList.toggle("visible", Number(panel.dataset.stepPanel) === stepNumber));
     setIndicatorState(stepNumber);
+    document.body.dataset.activeStep = String(stepNumber);
     document.querySelector(`[data-step-panel="${step}"] h2`)?.focus({ preventScroll: true });
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
@@ -152,8 +157,10 @@
   jobText?.addEventListener("input", () => { if (sourceError) sourceError.textContent = ""; });
 
   const selectedAdvisorInputs = () => advisorInputs.filter((input) => input.checked);
+  const advisorName = (input) => input.closest(".advisor-option")?.querySelector("strong")?.textContent || "Advisor";
   const renderAdvisorSelection = () => {
     const selected = selectedAdvisorInputs();
+    const selectedIds = selected.map((input) => input.value);
     advisorInputs.forEach((input) => {
       const option = input.closest(".advisor-option");
       option?.classList.toggle("selected", input.checked);
@@ -161,11 +168,47 @@
       input.disabled = blocked;
       option?.classList.toggle("disabled", blocked);
     });
-    if (advisorIds) advisorIds.value = selected.map((input) => input.value).join(",");
+    if (advisorIds) advisorIds.value = selectedIds.join(",");
     if (advisorCount) advisorCount.textContent = String(selected.length);
+    if (advisorClearButton) advisorClearButton.disabled = selected.length === 0;
+    advisorPresetButtons.forEach((button) => {
+      const presetIds = (button.dataset.advisorPreset || "").split(",").filter(Boolean);
+      const isActive = presetIds.length === selectedIds.length && presetIds.every((id) => selectedIds.includes(id));
+      button.classList.toggle("active", isActive);
+      button.setAttribute("aria-pressed", String(isActive));
+    });
+    if (advisorSummary) {
+      if (selected.length === 0) {
+        advisorSummary.textContent = "No specialists selected yet.";
+      } else {
+        advisorSummary.replaceChildren(...selected.map((input) => {
+          const chip = document.createElement("span");
+          chip.textContent = advisorName(input);
+          return chip;
+        }));
+      }
+    }
+    if (advisorGuidance) {
+      advisorGuidance.textContent = selected.length === 0
+        ? "Choose at least one specialist. You can mix any three roles."
+        : selected.length === 3
+          ? "Panel full. Remove one specialist to choose a different role."
+          : `Choose ${3 - selected.length} more, or run the review with this panel.`;
+    }
     if (advisorError && selected.length) advisorError.textContent = "";
   };
   advisorInputs.forEach((input) => input.addEventListener("change", renderAdvisorSelection));
+  advisorPresetButtons.forEach((button) => {
+    button.addEventListener("click", () => {
+      const presetIds = new Set((button.dataset.advisorPreset || "").split(",").filter(Boolean));
+      advisorInputs.forEach((input) => { input.checked = presetIds.has(input.value); });
+      renderAdvisorSelection();
+    });
+  });
+  advisorClearButton?.addEventListener("click", () => {
+    advisorInputs.forEach((input) => { input.checked = false; });
+    renderAdvisorSelection();
+  });
   renderAdvisorSelection();
 
   const showAnalysisProgress = () => {
@@ -221,7 +264,11 @@
   });
 
   const visiblePanel = panels.find((panel) => panel.classList.contains("visible"));
-  if (visiblePanel) setIndicatorState(Number(visiblePanel.dataset.stepPanel));
+  if (visiblePanel) {
+    const activeStep = Number(visiblePanel.dataset.stepPanel);
+    setIndicatorState(activeStep);
+    document.body.dataset.activeStep = String(activeStep);
+  }
 
   document.querySelectorAll("[data-download-json]").forEach((button) => {
     button.addEventListener("click", () => {

@@ -21,14 +21,21 @@ def open_job_step(page: Page, tmp_path: Path) -> None:
     page.get_by_role("button", name="Continue to job").click()
 
 
+def select_balanced_board(page: Page) -> None:
+    page.get_by_role("button", name="Balanced", exact=True).click()
+    expect(page.locator("[data-advisor-count]")).to_have_text("3")
+
+
 def test_home_presents_free_and_private_modes(page: Page) -> None:
     page.set_viewport_size({"width": 1440, "height": 900})
     page.goto(BASE_URL)
     expect(page.get_by_role("heading", name="Choose what you need today.")).to_be_visible()
     expect(page.get_by_role("heading", name="Check one CV against one job.")).to_be_visible()
     expect(page.get_by_role("heading", name="Run your full application pipeline.")).to_be_visible()
+    expect(page.get_by_text("Choose your own 1–3 specialist advisory panel", exact=True)).to_be_visible()
     expect(page.get_by_text("Shared $5 monthly AI pool", exact=False)).to_be_visible()
-    expect(page.get_by_text("Each approved member has a $10 monthly AI allowance", exact=False)).to_have_count(0)
+    allowance_copy = page.get_by_text("Each approved member has a $10 monthly AI allowance", exact=False)
+    expect(allowance_copy).to_have_count(0)
     assert page.locator('link[rel="stylesheet"]').get_attribute("href") == "/static/app.css?v=8"
     assert page.evaluate("getComputedStyle(document.body).backgroundColor") == "rgb(244, 243, 239)"
     page.get_by_test_id("member-mode-button").click()
@@ -211,8 +218,9 @@ def test_uploaded_cv_and_manual_job_complete_review(page: Page, tmp_path: Path) 
     page.get_by_test_id("job-input").fill(job_text)
     expect(page.locator('[data-char-count="job-text"]')).to_have_text(str(len(job_text)))
     page.get_by_role("button", name="Choose your board").click()
-    expect(page.get_by_role("heading", name="Choose who reviews your application.")).to_be_visible()
-    expect(page.locator("[data-advisor-count]")).to_have_text("3")
+    expect(page.get_by_role("heading", name="Assemble your advisory board.")).to_be_visible()
+    expect(page.locator("[data-advisor-count]")).to_have_text("0")
+    select_balanced_board(page)
     page.get_by_test_id("analyze-button").click()
     expect(page.get_by_test_id("results")).to_be_visible()
     expect(page.get_by_test_id("evidence-gaps")).to_contain_text("kubernetes")
@@ -230,11 +238,27 @@ def test_board_selection_is_interactive_bounded_and_has_visible_progress(
     options = page.locator("[data-advisor-option]")
     cards = page.locator(".advisor-option")
     expect(options).to_have_count(6)
+    expect(page.locator("[data-advisor-count]")).to_have_text("0")
+    expect(options.nth(4)).to_be_enabled()
+    page.get_by_test_id("analyze-button").click()
+    expect(page.locator("[data-advisor-error]")).to_contain_text("Choose at least one advisor")
+    expect(page.locator("[data-analysis-overlay]")).to_be_hidden()
     cards.nth(0).click()
-    expect(page.locator("[data-advisor-count]")).to_have_text("2")
+    expect(page.locator("[data-advisor-count]")).to_have_text("1")
     cards.nth(3).click()
+    expect(page.locator("[data-advisor-count]")).to_have_text("2")
+    cards.nth(4).click()
     expect(page.locator("[data-advisor-count]")).to_have_text("3")
-    expect(options.nth(4)).to_be_disabled()
+    expect(options.nth(5)).to_be_disabled()
+    expect(page.locator("[data-advisor-summary] span")).to_have_count(3)
+    expect(page.locator("[data-advisor-guidance]")).to_contain_text("Panel full")
+    page.get_by_role("button", name="Clear", exact=True).click()
+    expect(page.locator("[data-advisor-count]")).to_have_text("0")
+    expect(options.nth(5)).to_be_enabled()
+    page.get_by_role("button", name="Builder", exact=True).click()
+    expect(options.nth(2)).to_be_checked()
+    expect(options.nth(4)).to_be_checked()
+    expect(options.nth(5)).to_be_checked()
     page.locator("[data-testid='guided-form']").evaluate(
         "form => form.addEventListener('submit', event => event.preventDefault(), {once: true})"
     )
@@ -253,6 +277,7 @@ def test_pasted_cv_fallback_still_completes_review(page: Page) -> None:
     page.get_by_text("Paste the job description instead", exact=False).click()
     page.get_by_test_id("job-input").fill("Python backend systems")
     page.get_by_role("button", name="Choose your board").click()
+    select_balanced_board(page)
     page.get_by_test_id("analyze-button").click()
     expect(page.get_by_test_id("results")).to_be_visible()
 
@@ -264,7 +289,7 @@ def test_synthetic_demo_renders_and_downloads_valid_json(page: Page) -> None:
     expect(page.get_by_test_id("score")).not_to_have_text("0")
     expect(page.get_by_test_id("score-disclaimer")).to_contain_text("commercial ATS")
     expect(page.get_by_role("heading", name="How the board reached the finding")).to_be_visible()
-    expect(page.get_by_role("heading", name="Three perspectives, one decision")).to_be_visible()
+    expect(page.get_by_role("heading", name="Your panel, one decision")).to_be_visible()
     expect(page.locator(".advisor-verdict")).to_have_count(3)
     expect(page.get_by_role("heading", name="Safe, high-impact edits")).to_be_visible()
     expect(page.get_by_role("heading", name="Questions to prepare")).to_be_visible()
@@ -284,6 +309,14 @@ def test_mobile_pages_have_no_horizontal_overflow(page: Page) -> None:
     overflow = "document.documentElement.scrollWidth > document.documentElement.clientWidth"
     assert page.evaluate(overflow) is False
     page.goto(f"{BASE_URL}/workspace")
+    assert page.evaluate(overflow) is False
+    page.get_by_text("Paste CV text instead", exact=False).click()
+    page.get_by_test_id("cv-input").fill(CV_TEXT)
+    page.get_by_role("button", name="Continue to job").click()
+    page.get_by_text("Paste the job description instead", exact=False).click()
+    page.get_by_test_id("job-input").fill("Python services")
+    page.get_by_role("button", name="Choose your board").click()
+    expect(page.get_by_role("heading", name="Build the panel you want")).to_be_visible()
     assert page.evaluate(overflow) is False
     page.get_by_test_id("workspace-demo-button").click()
     expect(page.get_by_test_id("results")).to_be_visible()
@@ -307,6 +340,7 @@ def test_primary_flows_have_clean_browser_console(page: Page, tmp_path: Path) ->
     page.get_by_text("Paste the job description instead", exact=False).click()
     page.get_by_test_id("job-input").fill("Python services")
     page.get_by_role("button", name="Choose your board").click()
+    select_balanced_board(page)
     page.get_by_test_id("analyze-button").click()
     expect(page.get_by_test_id("results")).to_be_visible()
     assert messages == []
