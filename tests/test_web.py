@@ -296,7 +296,7 @@ def test_workspace_starts_four_stage_advisory_board_review() -> None:
     assert "Technical Recruiter" in response.text
     assert 'data-advisor-preset="recruiter,hiring_manager,technical"' in response.text
     assert "data-advisor-option checked" not in response.text
-    assert 'src="/static/app.js?v=10"' in response.text
+    assert 'src="/static/app.js?v=11"' in response.text
     assert 'enctype="multipart/form-data"' in response.text
 
 
@@ -325,8 +325,11 @@ def test_demo_renders_complete_board_finding() -> None:
     response = client.post("/demo")
     assert response.status_code == 200
     assert 'data-testid="results"' in response.text
-    assert "Advisor lenses" in response.text
+    assert "At a glance" in response.text
+    assert "How the evidence match is calculated" in response.text
     assert "Your panel, one decision" in response.text
+    assert "Board confidence" not in response.text
+    assert response.text.count('data-testid="score"') == 1
     assert "Safe, high-impact edits" in response.text
     assert "Questions to prepare" in response.text
     assert "Requirement by requirement" in response.text
@@ -402,6 +405,29 @@ def test_selected_advisors_reach_one_bounded_board_call(monkeypatch: pytest.Monk
     assert selected == ["executive", "impact"]
     assert "Executive Story Editor" in response.text
     assert "Impact &amp; ROI Reviewer" in response.text
+
+
+def test_provider_failure_keeps_canonical_result_first(monkeypatch: pytest.MonkeyPatch) -> None:
+    class BrokenBoardService:
+        def review(self, *_: object) -> web.EvidenceReview:
+            raise RuntimeError("provider unavailable")
+
+    monkeypatch.setattr(web, "free_ai_service", lambda: BrokenBoardService())
+    monkeypatch.setattr(web, "_enforce_ai_rate", lambda *_: None)
+    response = client.post(
+        "/analyze",
+        data={
+            "cv_text": "EXPERIENCE\nBuilt Python platforms",
+            "job_text": "Python Kubernetes platform leadership",
+            "advisor_ids": "recruiter,hiring_manager,technical",
+        },
+    )
+    assert response.status_code == 200
+    assert "AI panel unavailable for this run" in response.text
+    assert 'data-testid="ai-review-result"' not in response.text
+    assert "Board confidence" not in response.text
+    assert response.text.count('data-testid="score"') == 1
+    assert response.text.index("At a glance") < response.text.index("AI panel unavailable for this run")
 
 
 def test_board_composition_is_required_server_side(monkeypatch: pytest.MonkeyPatch) -> None:

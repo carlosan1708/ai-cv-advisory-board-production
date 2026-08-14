@@ -129,11 +129,46 @@ def test_gemini_board_uses_only_selected_advisor_briefs() -> None:
     reviewer = GeminiAiReviewer.__new__(GeminiAiReviewer)
     reviewer.client = SimpleNamespace(models=Models())
     reviewer.model = "gemini-2.5-flash"
-    reviewer.review("CV", "JOB", ["executive", "impact", "unknown"])
+    review, _, _ = reviewer.review("CV", "JOB", ["executive", "impact", "unknown"])
     prompt = str(captured["contents"])
     assert "executive: Executive Story Editor" in prompt
     assert "impact: Impact & ROI Reviewer" in prompt
     assert "Technical Recruiter" not in prompt
+    assert [finding.advisor_id for finding in review.advisor_findings] == ["executive", "impact"]
+
+
+def test_ai_review_truncates_provider_output_to_safe_schema_bounds() -> None:
+    review = EvidenceReview.model_validate(
+        {
+            "fit_score": 140,
+            "summary": "s" * 900,
+            "supported_strengths": ["strength" * 50] * 7,
+            "evidence_gaps": ["gap"] * 8,
+            "next_actions": ["action"] * 7,
+            "advisor_findings": [
+                {
+                    "advisor_id": "technical" * 10,
+                    "headline": "headline" * 30,
+                    "finding": "finding" * 100,
+                    "evidence": ["evidence" * 50] * 4,
+                    "recommendation": "recommend" * 60,
+                }
+            ]
+            * 5,
+            "tailoring_moves": [
+                {"section": "Experience", "change": "change" * 100, "reason": "reason" * 100}
+            ]
+            * 7,
+            "interview_questions": ["question" * 80] * 7,
+        }
+    )
+    assert review.fit_score == 100
+    assert len(review.summary) == 700
+    assert len(review.supported_strengths) == 5
+    assert len(review.advisor_findings) == 3
+    assert len(review.advisor_findings[0].evidence) == 2
+    assert len(review.tailoring_moves) == 4
+    assert len(review.interview_questions) == 4
 
 
 def test_budgeted_service_enforces_user_and_project_caps() -> None:

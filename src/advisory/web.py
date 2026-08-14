@@ -275,6 +275,7 @@ def render(
     assessment: Assessment | None = None,
     ai_review: EvidenceReview | None = None,
     ai_notice: str = "",
+    ai_degraded: bool = False,
     advisor_ids: list[str] | None = None,
     status_code: int = 200,
 ) -> HTMLResponse:
@@ -295,6 +296,7 @@ def render(
             "assessment_json": assessment_json,
             "ai_review": ai_review,
             "ai_notice": ai_notice,
+            "ai_degraded": ai_degraded,
             "advisors": ADVISORS,
             "advisor_map": ADVISOR_BY_ID,
             "selected_advisor_ids": selected_advisor_ids,
@@ -813,6 +815,7 @@ async def analyze(
         )
     ai_review: EvidenceReview | None = None
     ai_notice = ""
+    ai_degraded = False
     try:
         _enforce_ai_rate(
             _anonymous_rate_key(request), settings.anonymous_ai_requests_per_minute, "anonymous"
@@ -825,6 +828,7 @@ async def analyze(
             selected_advisor_ids,
         )
     except BudgetExceededError:
+        ai_degraded = True
         ai_review, _, _ = DeterministicAiReviewer().review(
             resolved_cv, resolved_job, selected_advisor_ids
         )
@@ -834,11 +838,13 @@ async def analyze(
         )
         emit("gemini.free_pool.exhausted")
     except RateLimitExceededError:
+        ai_degraded = True
         ai_review, _, _ = DeterministicAiReviewer().review(
             resolved_cv, resolved_job, selected_advisor_ids
         )
         ai_notice = "Free AI is limited to two attempts per minute. The evidence review still completed."
     except Exception as exc:
+        ai_degraded = True
         ai_review, _, _ = DeterministicAiReviewer().review(
             resolved_cv, resolved_job, selected_advisor_ids
         )
@@ -856,6 +862,7 @@ async def analyze(
         assessment=assessment,
         ai_review=ai_review,
         ai_notice=ai_notice,
+        ai_degraded=ai_degraded,
         advisor_ids=selected_advisor_ids,
     )
 

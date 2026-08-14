@@ -3,7 +3,7 @@ from __future__ import annotations
 from time import monotonic
 from typing import Protocol
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from advisory.advisors import advisor_context, normalize_advisor_ids
 from advisory.budget import BudgetLedger, Pricing
@@ -17,11 +17,51 @@ class AdvisorFinding(BaseModel):
     evidence: list[str] = Field(max_length=2)
     recommendation: str = Field(max_length=260)
 
+    @field_validator("advisor_id", mode="before")
+    @classmethod
+    def bound_advisor_id(cls, value: object) -> str:
+        return str(value)[:32]
+
+    @field_validator("headline", mode="before")
+    @classmethod
+    def bound_headline(cls, value: object) -> str:
+        return str(value)[:140]
+
+    @field_validator("finding", mode="before")
+    @classmethod
+    def bound_finding(cls, value: object) -> str:
+        return str(value)[:420]
+
+    @field_validator("recommendation", mode="before")
+    @classmethod
+    def bound_recommendation(cls, value: object) -> str:
+        return str(value)[:260]
+
+    @field_validator("evidence", mode="before")
+    @classmethod
+    def bound_evidence(cls, value: object) -> list[str]:
+        return [str(item)[:240] for item in value[:2]] if isinstance(value, list) else []
+
 
 class TailoringMove(BaseModel):
     section: str = Field(max_length=80)
     change: str = Field(max_length=260)
     reason: str = Field(max_length=220)
+
+    @field_validator("section", mode="before")
+    @classmethod
+    def bound_section(cls, value: object) -> str:
+        return str(value)[:80]
+
+    @field_validator("change", mode="before")
+    @classmethod
+    def bound_change(cls, value: object) -> str:
+        return str(value)[:260]
+
+    @field_validator("reason", mode="before")
+    @classmethod
+    def bound_reason(cls, value: object) -> str:
+        return str(value)[:220]
 
 
 class EvidenceReview(BaseModel):
@@ -33,6 +73,41 @@ class EvidenceReview(BaseModel):
     advisor_findings: list[AdvisorFinding] = Field(default_factory=list, max_length=3)
     tailoring_moves: list[TailoringMove] = Field(default_factory=list, max_length=4)
     interview_questions: list[str] = Field(default_factory=list, max_length=4)
+
+    @field_validator("fit_score", mode="before")
+    @classmethod
+    def bound_fit_score(cls, value: object) -> int:
+        if not isinstance(value, int | float | str):
+            return 0
+        try:
+            return max(0, min(100, int(value)))
+        except (TypeError, ValueError):
+            return 0
+
+    @field_validator("summary", mode="before")
+    @classmethod
+    def bound_summary(cls, value: object) -> str:
+        return str(value)[:700]
+
+    @field_validator("supported_strengths", "evidence_gaps", mode="before")
+    @classmethod
+    def bound_five_item_lists(cls, value: object) -> list[str]:
+        return [str(item)[:240] for item in value[:5]] if isinstance(value, list) else []
+
+    @field_validator("next_actions", "interview_questions", mode="before")
+    @classmethod
+    def bound_four_item_lists(cls, value: object) -> list[str]:
+        return [str(item)[:260] for item in value[:4]] if isinstance(value, list) else []
+
+    @field_validator("advisor_findings", mode="before")
+    @classmethod
+    def bound_advisor_findings(cls, value: object) -> list[object]:
+        return value[:3] if isinstance(value, list) else []
+
+    @field_validator("tailoring_moves", mode="before")
+    @classmethod
+    def bound_tailoring_moves(cls, value: object) -> list[object]:
+        return value[:4] if isinstance(value, list) else []
 
 
 class CvReview(BaseModel):
@@ -133,7 +208,8 @@ Make the report practical and specific:
 - advisor findings: distinct perspective, direct evidence, and one recommendation each.
 - tailoring moves: safe edits to emphasis, ordering, clarity, or wording; never add new experience.
 - interview questions: questions the candidate should prepare from gaps or important evidence.
-- keep every list item concise and the entire response useful without follow-up.
+- use at most five strengths, five gaps, four next actions, four tailoring moves, and four questions.
+- keep every list item under 35 words and the entire response useful without follow-up.
 
 CV:
 {cv_text}
@@ -155,6 +231,23 @@ JOB DESCRIPTION:
         review = response.parsed
         if not isinstance(review, EvidenceReview):
             review = EvidenceReview.model_validate_json(response.text or "{}")
+        selected_ids = [item["id"] for item in selected_advisors]
+        if advisor_ids is not None and selected_ids:
+            returned_findings = {finding.advisor_id: finding for finding in review.advisor_findings}
+            deterministic_review, _, _ = DeterministicAiReviewer().review(
+                cv_text, job_text, selected_ids
+            )
+            fallback_findings = {
+                finding.advisor_id: finding for finding in deterministic_review.advisor_findings
+            }
+            review = review.model_copy(
+                update={
+                    "advisor_findings": [
+                        returned_findings.get(advisor_id, fallback_findings[advisor_id])
+                        for advisor_id in selected_ids
+                    ]
+                }
+            )
         usage = response.usage_metadata
         input_tokens = int(getattr(usage, "prompt_token_count", 0) or 0)
         output_tokens = int(getattr(usage, "candidates_token_count", 0) or 0) + int(

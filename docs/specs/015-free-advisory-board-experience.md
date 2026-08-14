@@ -18,7 +18,7 @@ The anonymous experience should feel like an advisory board, not a generic CV sc
 2. Add an HTTPS job link or paste the description.
 3. Explicitly compose a panel of one to three advisors from six clear professional lenses. Nothing is preselected. Balanced, Builder, and Leadership presets are shortcuts that remain fully editable.
 4. Submit once and see an honest board-in-session progress state.
-5. Read the report in this order: consensus, specialist verdicts, tailoring plan, interview questions, deterministic baseline, evidence ledger, structured artifact.
+5. Read the report in this order: canonical evidence match, AI availability status, panel consensus, specialist verdicts, tailoring plan, interview questions, score breakdown, evidence ledger, structured artifact.
 
 ## AI and cost architecture
 
@@ -35,6 +35,7 @@ The anonymous experience should feel like an advisory board, not a generic CV sc
 - An empty panel is rejected on both client and server; the server never silently substitutes a default panel.
 - User CV and job text remain untrusted prompt data and cannot select a system instruction or advisor prompt.
 - Model output is validated against bounded Pydantic schemas before rendering.
+- Provider strings and lists are truncated to schema bounds before validation, and advisor findings are reordered against the server allowlist.
 - Tailoring moves may change emphasis, order, clarity, or wording but may never add unsupported experience.
 - Rendered content uses Jinja escaping and DOM `textContent`; no model HTML is executed.
 
@@ -48,6 +49,8 @@ The anonymous experience should feel like an advisory board, not a generic CV sc
 - The selected IDs survive validation errors and reach the reviewer in order.
 - Submitting replaces the form with a visible, accessible board progress state.
 - The report shows a distinct grounded finding for every selected advisor.
+- Exactly one canonical numeric match score appears. AI panel confidence never competes with it.
+- Provider degradation appears as a compact status after the primary result and does not render generic fallback advisor cards.
 - The report includes safe tailoring moves and interview questions.
 - The deterministic evidence baseline remains available and is visually secondary.
 - Anonymous cost caps, no-persistence behavior, and security headers remain unchanged.

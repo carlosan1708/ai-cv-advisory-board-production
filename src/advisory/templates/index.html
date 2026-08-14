@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>AI Job Match | AI CV Advisory Board</title>
   <meta name="description" content="Compare a CV with a specific job using grounded AI.">
-  <link rel="stylesheet" href="/static/app.css?v=10">
-  <script src="/static/app.js?v=10" defer></script>
+  <link rel="stylesheet" href="/static/app.css?v=11">
+  <script src="/static/app.js?v=11" defer></script>
 </head>
 <body class="workspace-page{% if assessment %} has-results{% endif %}{% if error %} has-error{% endif %}">
   <header class="app-header workspace-header">
@@ -23,7 +23,7 @@
   <main class="workspace-shell">
     {% if assessment %}
     <div class="workspace-title results-title-block">
-      <div><span class="overline">Advisory board report</span><h1>Your board has reached a verdict.</h1><p>Start with the consensus, hear each specialist, then use the grounded tailoring plan.</p></div>
+      <div><span class="overline">CV–job review</span><h1>Your match is ready.</h1><p>Start with the evidence match, understand the biggest gaps, then use your panel's recommendations.</p></div>
       <a class="button button-secondary" href="/workspace">Start another review</a>
     </div>
     {% else %}
@@ -196,12 +196,45 @@
     {% set matched = assessment.requirements | selectattr('matched') | list %}
     {% set missing = assessment.requirements | rejectattr('matched') | list %}
     <section class="results" aria-labelledby="decision-title" data-testid="results">
-      {% if ai_review %}
+      <section class="decision-card primary-decision" aria-describedby="score-disclaimer">
+        <div class="result-score">
+          <span>Evidence match</span>
+          <div><strong data-testid="score">{{ assessment.score }}</strong><small>/100</small></div>
+          <span class="band-badge band-{{ assessment.band }}">{{ assessment.band }} match</span>
+        </div>
+        <div class="decision-copy">
+          <span class="overline">At a glance</span>
+          {% if assessment.band == 'strong' %}
+          <h2 id="decision-title">Your CV makes a credible case for this role.</h2>
+          <p>{{ matched | length }} of {{ assessment.requirements | length }} priority requirements have direct support. Use the evidence ledger to strengthen the remaining gaps.</p>
+          {% elif assessment.band == 'partial' %}
+          <h2 id="decision-title">The fit is promising, but the evidence is uneven.</h2>
+          <p>{{ matched | length }} of {{ assessment.requirements | length }} priority requirements have direct support. Address the highest-value gaps before tailoring the application.</p>
+          {% else %}
+          <h2 id="decision-title">This role asks for evidence the CV does not yet show.</h2>
+          <p>{{ matched | length }} of {{ assessment.requirements | length }} priority requirements have direct support. Treat missing evidence as a decision point, not permission to invent experience.</p>
+          {% endif %}
+          {% if assessment.recommendations %}<p class="decision-next"><strong>Best next step:</strong> {{ assessment.recommendations[0] }}</p>{% endif %}
+          <p class="score-disclaimer" id="score-disclaimer" data-testid="score-disclaimer"><span aria-hidden="true">i</span>{{ assessment.warnings[0] }}</p>
+          <span class="run-meta">Run {{ run_id[:8] }} &middot; {{ assessment.scoring_version }} &middot; Schema {{ assessment.schema_version }}</span>
+        </div>
+        <div class="decision-facts" aria-label="Finding totals">
+          <div><strong>{{ matched | length }}</strong><span>Requirements supported</span></div>
+          <div><strong>{{ missing | length }}</strong><span>Evidence gaps</span></div>
+        </div>
+      </section>
+
+      {% if ai_degraded %}
+      <div class="ai-degraded-notice" role="status" data-testid="ai-degraded-notice">
+        <span aria-hidden="true">i</span><div><strong>AI panel unavailable for this run</strong><p>{{ ai_notice }} Your evidence match and requirement analysis are still available below.</p></div>
+      </div>
+      {% endif %}
+
+      {% if ai_review and not ai_degraded %}
       <section class="board-report" aria-labelledby="ai-insight-title" data-testid="ai-review-result">
-        {% if ai_notice %}<div class="board-fallback-notice" role="status"><strong>Grounded fallback report</strong><p>{{ ai_notice }}</p></div>{% endif %}
+        {% if ai_notice %}<div class="board-fallback-notice" role="status"><strong>Sample mode</strong><p>{{ ai_notice }}</p></div>{% endif %}
         <div class="board-consensus">
-          <div class="consensus-score"><span>Board confidence</span><strong>{{ ai_review.fit_score }}<small>%</small></strong><em>supported match</em></div>
-          <div><span class="overline">{% if ai_notice %}Grounded board consensus{% else %}Gemini board consensus{% endif %}</span><h2 id="ai-insight-title">What the board wants you to know.</h2><p>{{ ai_review.summary }}</p><small>Built from this session's source documents. Verify every statement before using it.</small></div>
+          <div><span class="overline">{% if ai_notice %}Sample panel analysis{% else %}Gemini panel analysis{% endif %}</span><h2 id="ai-insight-title">What your selected panel wants you to know.</h2><p>{{ ai_review.summary }}</p><small>Built from this session's source documents. Verify every statement before using it.</small></div>
         </div>
 
         {% if ai_review.advisor_findings %}
@@ -244,57 +277,28 @@
           <div class="ai-insight-grid"><div><h3>Supported strengths</h3><ul>{% for item in ai_review.supported_strengths %}<li>{{ item }}</li>{% endfor %}</ul></div><div><h3>Evidence gaps</h3><ul>{% for item in ai_review.evidence_gaps %}<li>{{ item }}</li>{% endfor %}</ul></div><div><h3>Next actions</h3><ul>{% for item in ai_review.next_actions %}<li>{{ item }}</li>{% endfor %}</ul></div></div>
         </details>
       </section>
-      {% elif ai_notice %}
-      <div class="ai-fallback-notice" role="status"><strong>Job match completed</strong><p>{{ ai_notice }}</p></div>
       {% endif %}
 
-      <section class="decision-card baseline-decision" aria-describedby="score-disclaimer">
-        <div class="result-score">
-          <span>Evidence baseline</span>
-          <div><strong data-testid="score">{{ assessment.score }}</strong><small>/100</small></div>
-          <span class="band-badge band-{{ assessment.band }}">{{ assessment.band }} match</span>
-        </div>
-        <div class="decision-copy">
-          <span class="overline">Deterministic cross-check</span>
-          {% if assessment.band == 'strong' %}
-          <h2 id="decision-title">Your CV makes a credible case for this role.</h2>
-          <p>{{ matched | length }} of {{ assessment.requirements | length }} priority requirements have direct support. Use the evidence ledger to strengthen the remaining gaps.</p>
-          {% elif assessment.band == 'partial' %}
-          <h2 id="decision-title">The fit is promising, but the evidence is uneven.</h2>
-          <p>{{ matched | length }} of {{ assessment.requirements | length }} priority requirements have direct support. Address the highest-value gaps before tailoring the application.</p>
-          {% else %}
-          <h2 id="decision-title">This role asks for evidence the CV does not yet show.</h2>
-          <p>{{ matched | length }} of {{ assessment.requirements | length }} priority requirements have direct support. Treat missing evidence as a decision point, not permission to invent experience.</p>
-          {% endif %}
-          <p class="score-disclaimer" id="score-disclaimer" data-testid="score-disclaimer"><span aria-hidden="true">i</span>{{ assessment.warnings[0] }}</p>
-          <span class="run-meta">Run {{ run_id[:8] }} &middot; {{ assessment.scoring_version }} &middot; Schema {{ assessment.schema_version }}</span>
-        </div>
-        <div class="decision-facts" aria-label="Finding totals">
-          <div><strong>{{ matched | length }}</strong><span>Requirements supported</span></div>
-          <div><strong>{{ missing | length }}</strong><span>Evidence gaps</span></div>
-        </div>
-      </section>
-
       <section class="lens-section" aria-labelledby="lens-title">
-        <div class="result-section-heading"><div><span class="overline">Advisor lenses</span><h2 id="lens-title">How the board reached the finding</h2></div><p>Each lens maps to a documented scoring component.</p></div>
+        <div class="result-section-heading"><div><span class="overline">Score breakdown</span><h2 id="lens-title">How the evidence match is calculated</h2></div><p>Three documented components add up to the score above.</p></div>
         <div class="lens-grid">
           <article class="lens-card">
-            <div class="lens-top"><span class="advisor-avatar">TR</span><span>{{ assessment.components.requirement_coverage }} / 70</span></div>
-            <h3>Technical Recruiter</h3><p>Checks whether priority role language is supported by direct CV evidence.</p>
+            <div class="lens-top"><span class="advisor-avatar">RC</span><span>{{ assessment.components.requirement_coverage }} / 70</span></div>
+            <h3>Requirement coverage</h3><p>Measures how many priority role requirements have direct support in the CV.</p>
             <div class="metric-track"><i style="width: {{ assessment.components.requirement_coverage / 70 * 100 }}%"></i></div>
-            <small>Requirement coverage</small>
+            <small>70 points maximum</small>
           </article>
           <article class="lens-card">
-            <div class="lens-top"><span class="advisor-avatar">HM</span><span>{{ assessment.components.document_structure }} / 20</span></div>
-            <h3>Hiring Manager</h3><p>Checks whether experience, skills, and education are structured for a fast decision.</p>
+            <div class="lens-top"><span class="advisor-avatar">CS</span><span>{{ assessment.components.document_structure }} / 20</span></div>
+            <h3>CV structure</h3><p>Checks whether experience, skills, and education are easy to find and review.</p>
             <div class="metric-track"><i style="width: {{ assessment.components.document_structure / 20 * 100 }}%"></i></div>
-            <small>Document structure</small>
+            <small>20 points maximum</small>
           </article>
           <article class="lens-card">
-            <div class="lens-top"><span class="advisor-avatar">TE</span><span>{{ assessment.components.evidence_density }} / 10</span></div>
-            <h3>Technical Reviewer</h3><p>Checks the density of specific CV lines supporting matched technical requirements.</p>
+            <div class="lens-top"><span class="advisor-avatar">ED</span><span>{{ assessment.components.evidence_density }} / 10</span></div>
+            <h3>Evidence density</h3><p>Rewards specific CV lines that support matched requirements with defensible evidence.</p>
             <div class="metric-track"><i style="width: {{ assessment.components.evidence_density / 10 * 100 }}%"></i></div>
-            <small>Evidence density</small>
+            <small>10 points maximum</small>
           </article>
         </div>
       </section>
