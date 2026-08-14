@@ -13,6 +13,11 @@
   const jobUrl = document.querySelector("[data-testid='job-url-input']");
   const jobText = document.querySelector("[data-testid='job-input']");
   const sourceError = document.querySelector("[data-source-error]");
+  const advisorInputs = [...document.querySelectorAll("[data-advisor-option]")];
+  const advisorIds = document.querySelector("[data-advisor-ids]");
+  const advisorCount = document.querySelector("[data-advisor-count]");
+  const advisorError = document.querySelector("[data-advisor-error]");
+  const analysisOverlay = document.querySelector("[data-analysis-overlay]");
   const maximumFileSize = 5 * 1024 * 1024;
 
   const humanFileSize = (bytes) => {
@@ -69,14 +74,18 @@
 
   document.querySelectorAll("[data-next-step]").forEach((button) => {
     button.addEventListener("click", () => {
-      const selectedFile = fileInput?.files?.[0];
-      if (selectedFile && !renderSelectedFile(selectedFile)) return;
-      if (!selectedFile && !cvText?.value.trim()) {
-        if (uploadError) uploadError.textContent = "Upload a PDF or TXT CV, or open the fallback to paste its text.";
-        fileInput?.focus();
-        return;
+      const nextStep = Number(button.dataset.nextStep);
+      if (nextStep === 2) {
+        const selectedFile = fileInput?.files?.[0];
+        if (selectedFile && !renderSelectedFile(selectedFile)) return;
+        if (!selectedFile && !cvText?.value.trim()) {
+          if (uploadError) uploadError.textContent = "Upload a PDF or TXT CV, or open the fallback to paste its text.";
+          fileInput?.focus();
+          return;
+        }
       }
-      showStep(button.dataset.nextStep);
+      if (nextStep === 3 && !validateTarget()) return;
+      showStep(nextStep);
     });
   });
 
@@ -142,15 +151,73 @@
   jobUrl?.addEventListener("input", () => { if (sourceError) sourceError.textContent = ""; });
   jobText?.addEventListener("input", () => { if (sourceError) sourceError.textContent = ""; });
 
+  const selectedAdvisorInputs = () => advisorInputs.filter((input) => input.checked);
+  const renderAdvisorSelection = () => {
+    const selected = selectedAdvisorInputs();
+    advisorInputs.forEach((input) => {
+      const option = input.closest(".advisor-option");
+      option?.classList.toggle("selected", input.checked);
+      const blocked = selected.length >= 3 && !input.checked;
+      input.disabled = blocked;
+      option?.classList.toggle("disabled", blocked);
+    });
+    if (advisorIds) advisorIds.value = selected.map((input) => input.value).join(",");
+    if (advisorCount) advisorCount.textContent = String(selected.length);
+    if (advisorError && selected.length) advisorError.textContent = "";
+  };
+  advisorInputs.forEach((input) => input.addEventListener("change", renderAdvisorSelection));
+  renderAdvisorSelection();
+
+  const showAnalysisProgress = () => {
+    if (!analysisOverlay || !reviewForm) return;
+    const layout = reviewForm.closest(".document-review-layout");
+    const advisors = analysisOverlay.querySelector("[data-analysis-advisors]");
+    const selected = selectedAdvisorInputs();
+    advisors?.replaceChildren(...selected.map((input) => {
+      const chip = document.createElement("span");
+      chip.textContent = input.closest(".advisor-option")?.querySelector("strong")?.textContent || "Advisor";
+      return chip;
+    }));
+    reviewForm.hidden = true;
+    analysisOverlay.hidden = false;
+    layout?.classList.add("is-analyzing");
+    setIndicatorState(4);
+    const stages = [
+      ["Reading your source documents…", "The board is mapping the role to claims that are actually present in your CV."],
+      ["Your specialists are reviewing…", "Each advisor is applying a different professional lens to the same evidence."],
+      ["Building a grounded action plan…", "The chair is combining the findings into safe tailoring moves and interview preparation."],
+    ];
+    let index = 0;
+    const title = analysisOverlay.querySelector("[data-analysis-title]");
+    const copy = analysisOverlay.querySelector("[data-analysis-copy]");
+    const chips = [...analysisOverlay.querySelectorAll("[data-analysis-advisors] span")];
+    const advance = () => {
+      const stage = stages[index % stages.length];
+      if (title) title.textContent = stage[0];
+      if (copy) copy.textContent = stage[1];
+      chips.forEach((chip, chipIndex) => chip.classList.toggle("active", chipIndex === index % Math.max(1, chips.length)));
+      index += 1;
+    };
+    advance();
+    window.setInterval(advance, 2600);
+  };
+
   reviewForm?.addEventListener("submit", (event) => {
     if (!validateTarget()) {
       event.preventDefault();
       return;
     }
+    if (!selectedAdvisorInputs().length) {
+      event.preventDefault();
+      if (advisorError) advisorError.textContent = "Choose at least one advisor for the board review.";
+      showStep(3);
+      return;
+    }
     const submitButton = reviewForm.querySelector("[data-testid='analyze-button']");
     if (!submitButton) return;
     submitButton.setAttribute("aria-busy", "true");
-    submitButton.textContent = "Reading the job and running review...";
+    submitButton.textContent = "Starting your board…";
+    showAnalysisProgress();
   });
 
   const visiblePanel = panels.find((panel) => panel.classList.contains("visible"));

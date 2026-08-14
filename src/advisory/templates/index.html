@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>AI Job Match | AI CV Advisory Board</title>
   <meta name="description" content="Compare a CV with a specific job using grounded AI.">
-  <link rel="stylesheet" href="/static/app.css?v=6">
-  <script src="/static/app.js?v=6" defer></script>
+  <link rel="stylesheet" href="/static/app.css?v=8">
+  <script src="/static/app.js?v=8" defer></script>
 </head>
 <body class="workspace-page{% if assessment %} has-results{% endif %}{% if error %} has-error{% endif %}">
   <header class="app-header workspace-header">
@@ -23,7 +23,7 @@
   <main class="workspace-shell">
     {% if assessment %}
     <div class="workspace-title results-title-block">
-      <div><span class="overline">AI job match</span><h1>Your CV-to-job match is ready.</h1><p>Start with the match summary, then inspect the CV lines behind it.</p></div>
+      <div><span class="overline">Advisory board report</span><h1>Your board has reached a verdict.</h1><p>Start with the consensus, hear each specialist, then use the grounded tailoring plan.</p></div>
       <a class="button button-secondary" href="/workspace">Start another review</a>
     </div>
     {% else %}
@@ -41,8 +41,11 @@
       <div class="progress-step {% if assessment %}complete{% endif %}" data-step-indicator="2">
         <span class="progress-marker">2</span><div><strong>Job</strong><small>Public job link</small></div>
       </div>
-      <div class="progress-step {% if assessment %}active{% endif %}" data-step-indicator="3">
-        <span class="progress-marker">3</span><div><strong>Report</strong><small>AI job match</small></div>
+      <div class="progress-step {% if assessment %}complete{% endif %}" data-step-indicator="3">
+        <span class="progress-marker">3</span><div><strong>Board</strong><small>Choose advisors</small></div>
+      </div>
+      <div class="progress-step {% if assessment %}active{% endif %}" data-step-indicator="4">
+        <span class="progress-marker">4</span><div><strong>Report</strong><small>Board verdict</small></div>
       </div>
     </nav>
 
@@ -53,9 +56,10 @@
     {% if not assessment %}
     <div class="document-review-layout">
       <form method="post" action="/analyze" enctype="multipart/form-data" class="review-form document-review-form" data-testid="guided-form" novalidate>
-        <section class="review-panel {% if error_stage != 2 %}visible{% endif %}" data-step-panel="1" aria-labelledby="cv-step-title">
+        <input name="advisor_ids" type="hidden" value="{{ selected_advisor_ids | join(',') }}" data-advisor-ids>
+        <section class="review-panel {% if error_stage not in [2, 3] %}visible{% endif %}" data-step-panel="1" aria-labelledby="cv-step-title">
           <div class="panel-heading">
-            <span class="stage-label">Stage 1 of 2</span>
+            <span class="stage-label">Stage 1 of 3</span>
             <h2 id="cv-step-title" tabindex="-1">Upload the CV you want reviewed.</h2>
             <p>Use the same document you would send with an application. We extract its text in memory and do not store the file.</p>
           </div>
@@ -92,7 +96,7 @@
 
         <section class="review-panel {% if error_stage == 2 %}visible{% endif %}" data-step-panel="2" aria-labelledby="job-step-title">
           <div class="panel-heading">
-            <span class="stage-label">Stage 2 of 2</span>
+            <span class="stage-label">Stage 2 of 3</span>
             <h2 id="job-step-title" tabindex="-1">Add the job you are considering.</h2>
             <p>Paste the public posting link. We read the description for this review; if the site blocks access, use the manual fallback.</p>
           </div>
@@ -125,10 +129,46 @@
 
           <div class="panel-actions">
             <button class="text-action as-button" type="button" data-previous-step="1">&larr; Back to CV</button>
-            <button class="button button-primary" type="submit" data-testid="analyze-button">Run free AI review <span aria-hidden="true">&rarr;</span></button>
+            <button class="button button-primary" type="button" data-next-step="3">Choose your board <span aria-hidden="true">&rarr;</span></button>
+          </div>
+        </section>
+
+        <section class="review-panel {% if error_stage == 3 %}visible{% endif %}" data-step-panel="3" aria-labelledby="board-step-title">
+          <div class="panel-heading board-panel-heading">
+            <span class="stage-label">Stage 3 of 3</span>
+            <h2 id="board-step-title" tabindex="-1">Choose who reviews your application.</h2>
+            <p>Select up to three specialists. They deliberate in one bounded Gemini call, so a deeper report does not multiply AI cost.</p>
+          </div>
+
+          <div class="board-selection-meta"><span><strong data-advisor-count>{{ selected_advisor_ids | length }}</strong> of 3 selected</span><small>Three balanced advisors are preselected</small></div>
+          <div class="advisor-picker" data-advisor-picker>
+            {% for advisor in advisors %}
+            <label class="advisor-option {% if advisor.id in selected_advisor_ids %}selected{% endif %}">
+              <input type="checkbox" value="{{ advisor.id }}" data-advisor-option {% if advisor.id in selected_advisor_ids %}checked{% endif %}>
+              <span class="advisor-option-avatar">{{ advisor.initials }}</span>
+              <span class="advisor-option-copy"><strong>{{ advisor.name }}</strong><small>{{ advisor.role }}</small><em>{{ advisor.focus }}</em></span>
+              <span class="advisor-option-check" aria-hidden="true">&check;</span>
+            </label>
+            {% endfor %}
+          </div>
+          <p class="source-error" data-advisor-error role="alert" aria-live="polite"></p>
+
+          <div class="board-promise"><span aria-hidden="true">i</span><p><strong>One review, multiple perspectives.</strong> Your selected advisors share one evidence-grounded model response. No CV or job content is saved.</p></div>
+          <div class="panel-actions">
+            <button class="text-action as-button" type="button" data-previous-step="2">&larr; Back to job</button>
+            <button class="button button-primary" type="submit" data-testid="analyze-button">Start board review <span aria-hidden="true">&rarr;</span></button>
           </div>
         </section>
       </form>
+
+      <section class="analysis-overlay" data-analysis-overlay hidden aria-live="polite" aria-label="Board review in progress">
+        <div class="analysis-orbit" aria-hidden="true"><span></span><i></i><i></i><i></i></div>
+        <span class="overline">Board in session</span>
+        <h2 data-analysis-title>Reading your source documents…</h2>
+        <p data-analysis-copy>Each advisor is checking the same evidence from a different professional perspective.</p>
+        <div class="analysis-advisors" data-analysis-advisors></div>
+        <small>Usually under 30 seconds · Please keep this page open</small>
+      </section>
 
       <div class="sample-route">
         <span>Want to see the output first?</span>
@@ -143,14 +183,66 @@
     {% set matched = assessment.requirements | selectattr('matched') | list %}
     {% set missing = assessment.requirements | rejectattr('matched') | list %}
     <section class="results" aria-labelledby="decision-title" data-testid="results">
-      <div class="decision-card" aria-describedby="score-disclaimer">
+      {% if ai_review %}
+      <section class="board-report" aria-labelledby="ai-insight-title" data-testid="ai-review-result">
+        {% if ai_notice %}<div class="board-fallback-notice" role="status"><strong>Grounded fallback report</strong><p>{{ ai_notice }}</p></div>{% endif %}
+        <div class="board-consensus">
+          <div class="consensus-score"><span>Board confidence</span><strong>{{ ai_review.fit_score }}<small>%</small></strong><em>supported match</em></div>
+          <div><span class="overline">{% if ai_notice %}Grounded board consensus{% else %}Gemini board consensus{% endif %}</span><h2 id="ai-insight-title">What the board wants you to know.</h2><p>{{ ai_review.summary }}</p><small>Built from this session's source documents. Verify every statement before using it.</small></div>
+        </div>
+
+        {% if ai_review.advisor_findings %}
+        <section class="advisor-verdicts" aria-labelledby="advisor-verdicts-title">
+          <div class="result-section-heading"><div><span class="overline">Your selected specialists</span><h2 id="advisor-verdicts-title">Three perspectives, one decision</h2></div><p>Each finding must point back to CV evidence.</p></div>
+          <div class="advisor-verdict-grid">
+            {% for finding in ai_review.advisor_findings %}
+            {% set advisor = advisor_map.get(finding.advisor_id) %}
+            <article class="advisor-verdict">
+              <div class="advisor-verdict-heading"><span class="advisor-avatar">{{ advisor.initials if advisor else 'AI' }}</span><div><strong>{{ advisor.name if advisor else 'Board advisor' }}</strong><small>{{ advisor.role if advisor else 'Selected specialist' }}</small></div></div>
+              <h3>{{ finding.headline }}</h3>
+              <p>{{ finding.finding }}</p>
+              <div class="verdict-evidence"><span>Evidence used</span>{% for evidence in finding.evidence %}<q>{{ evidence }}</q>{% endfor %}</div>
+              <div class="verdict-action"><span aria-hidden="true">&rarr;</span><p>{{ finding.recommendation }}</p></div>
+            </article>
+            {% endfor %}
+          </div>
+        </section>
+        {% endif %}
+
+        <div class="board-action-grid">
+          <section class="tailoring-plan" aria-labelledby="tailoring-title">
+            <div class="result-section-heading compact"><div><span class="overline">Tailor before sending</span><h2 id="tailoring-title">Safe, high-impact edits</h2></div></div>
+            <div class="tailoring-list">
+              {% for move in ai_review.tailoring_moves %}
+              <article><span>{{ loop.index }}</span><div><strong>{{ move.section }}</strong><p>{{ move.change }}</p><small>{{ move.reason }}</small></div></article>
+              {% else %}
+              {% for action in ai_review.next_actions %}<article><span>{{ loop.index }}</span><div><strong>Next action</strong><p>{{ action }}</p></div></article>{% endfor %}
+              {% endfor %}
+            </div>
+          </section>
+          <section class="interview-prep" aria-labelledby="interview-title">
+            <div class="result-section-heading compact"><div><span class="overline">Interview preparation</span><h2 id="interview-title">Questions to prepare</h2></div></div>
+            <ol>{% for question in ai_review.interview_questions %}<li><span>{{ loop.index }}</span><p>{{ question }}</p></li>{% else %}{% for gap in ai_review.evidence_gaps[:3] %}<li><span>{{ loop.index }}</span><p>What truthful example can you share about {{ gap }}?</p></li>{% endfor %}{% endfor %}</ol>
+          </section>
+        </div>
+
+        <details class="board-evidence-summary">
+          <summary><span><strong>Board evidence summary</strong><small>Strengths, gaps, and next actions</small></span><span aria-hidden="true">+</span></summary>
+          <div class="ai-insight-grid"><div><h3>Supported strengths</h3><ul>{% for item in ai_review.supported_strengths %}<li>{{ item }}</li>{% endfor %}</ul></div><div><h3>Evidence gaps</h3><ul>{% for item in ai_review.evidence_gaps %}<li>{{ item }}</li>{% endfor %}</ul></div><div><h3>Next actions</h3><ul>{% for item in ai_review.next_actions %}<li>{{ item }}</li>{% endfor %}</ul></div></div>
+        </details>
+      </section>
+      {% elif ai_notice %}
+      <div class="ai-fallback-notice" role="status"><strong>Job match completed</strong><p>{{ ai_notice }}</p></div>
+      {% endif %}
+
+      <section class="decision-card baseline-decision" aria-describedby="score-disclaimer">
         <div class="result-score">
-          <span>Role alignment</span>
+          <span>Evidence baseline</span>
           <div><strong data-testid="score">{{ assessment.score }}</strong><small>/100</small></div>
           <span class="band-badge band-{{ assessment.band }}">{{ assessment.band }} match</span>
         </div>
         <div class="decision-copy">
-          <span class="overline">Decision summary</span>
+          <span class="overline">Deterministic cross-check</span>
           {% if assessment.band == 'strong' %}
           <h2 id="decision-title">Your CV makes a credible case for this role.</h2>
           <p>{{ matched | length }} of {{ assessment.requirements | length }} priority requirements have direct support. Use the evidence ledger to strengthen the remaining gaps.</p>
@@ -168,18 +260,7 @@
           <div><strong>{{ matched | length }}</strong><span>Requirements supported</span></div>
           <div><strong>{{ missing | length }}</strong><span>Evidence gaps</span></div>
         </div>
-      </div>
-
-      {% if ai_review %}
-      <section class="ai-insight-card" aria-labelledby="ai-insight-title" data-testid="ai-review-result">
-        <div class="ai-insight-heading"><div><span class="overline">Gemini job match</span><h2 id="ai-insight-title">{{ ai_review.fit_score }}% supported match</h2></div><span>AI-assisted</span></div>
-        <p class="ai-insight-summary">{{ ai_review.summary }}</p>
-        <div class="ai-insight-grid"><div><h3>Supported strengths</h3><ul>{% for item in ai_review.supported_strengths %}<li>{{ item }}</li>{% endfor %}</ul></div><div><h3>Evidence gaps</h3><ul>{% for item in ai_review.evidence_gaps %}<li>{{ item }}</li>{% endfor %}</ul></div><div><h3>Next actions</h3><ul>{% for item in ai_review.next_actions %}<li>{{ item }}</li>{% endfor %}</ul></div></div>
-        <small>Generated by AI. Verify every statement against your source documents.</small>
       </section>
-      {% elif ai_notice %}
-      <div class="ai-fallback-notice" role="status"><strong>Job match completed</strong><p>{{ ai_notice }}</p></div>
-      {% endif %}
 
       <section class="lens-section" aria-labelledby="lens-title">
         <div class="result-section-heading"><div><span class="overline">Advisor lenses</span><h2 id="lens-title">How the board reached the finding</h2></div><p>Each lens maps to a documented scoring component.</p></div>

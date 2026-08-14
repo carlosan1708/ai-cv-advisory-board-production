@@ -19,6 +19,13 @@ from advisory.access import (
     FirestoreAccessControl,
     InMemoryAccessControl,
 )
+from advisory.advisors import (
+    ADVISOR_BY_ID,
+    ADVISORS,
+    DEFAULT_ADVISOR_IDS,
+    advisor_context,
+    normalize_advisor_ids,
+)
 from advisory.ai import (
     AiReviewer,
     BudgetedAiService,
@@ -268,8 +275,10 @@ def render(
     assessment: Assessment | None = None,
     ai_review: EvidenceReview | None = None,
     ai_notice: str = "",
+    advisor_ids: list[str] | None = None,
     status_code: int = 200,
 ) -> HTMLResponse:
+    selected_advisor_ids = normalize_advisor_ids(advisor_ids)
     assessment_json = json.dumps(assessment.model_dump(), indent=2) if assessment else ""
     return templates.TemplateResponse(
         request=request,
@@ -286,6 +295,10 @@ def render(
             "assessment_json": assessment_json,
             "ai_review": ai_review,
             "ai_notice": ai_notice,
+            "advisors": ADVISORS,
+            "advisor_map": ADVISOR_BY_ID,
+            "selected_advisor_ids": selected_advisor_ids,
+            "selected_advisors": advisor_context(selected_advisor_ids),
             "free_budget": free_budget(),
         },
         status_code=status_code,
@@ -662,7 +675,22 @@ def workspace(request: Request) -> HTMLResponse:
 @app.post("/demo", response_class=HTMLResponse)
 def demo(request: Request) -> HTMLResponse:
     run_id, assessment = service().analyze(DEMO_CV, DEMO_JOB)
-    return render(request, cv_text=DEMO_CV, job_text=DEMO_JOB, run_id=run_id, assessment=assessment)
+    ai_review, _, _ = DeterministicAiReviewer().review(
+        DEMO_CV, DEMO_JOB, list(DEFAULT_ADVISOR_IDS)
+    )
+    return render(
+        request,
+        cv_text=DEMO_CV,
+        job_text=DEMO_JOB,
+        run_id=run_id,
+        assessment=assessment,
+        ai_review=ai_review,
+        ai_notice=(
+            "This sample demonstrates the report without spending the shared free AI pool. "
+            "A real review uses the selected board in one Gemini call."
+        ),
+        advisor_ids=list(DEFAULT_ADVISOR_IDS),
+    )
 
 
 @app.post("/analyze", response_class=HTMLResponse)
@@ -672,7 +700,9 @@ async def analyze(
     cv_file: UploadFile | None = File(None),  # noqa: B008
     job_text: str = Form(""),
     job_url: str = Form(""),
+    advisor_ids: str = Form(""),
 ) -> HTMLResponse:
+    selected_advisor_ids = normalize_advisor_ids(advisor_ids.split(","))
     resolved_cv = cv_text.strip()
     cv_filename = ""
     if cv_file and cv_file.filename:
@@ -693,6 +723,7 @@ async def analyze(
                 cv_filename=cv_filename,
                 job_text=job_text,
                 job_url=job_url,
+                advisor_ids=selected_advisor_ids,
                 error=str(exc),
                 error_stage=1,
                 status_code=422,
@@ -712,6 +743,7 @@ async def analyze(
             cv_text=cv_text,
             job_text=job_text,
             job_url=job_url,
+            advisor_ids=selected_advisor_ids,
             error="Upload a PDF or TXT CV, or paste the CV text.",
             error_stage=1,
             status_code=422,
@@ -729,6 +761,7 @@ async def analyze(
                 cv_filename=cv_filename,
                 job_text=job_text,
                 job_url=job_url,
+                advisor_ids=selected_advisor_ids,
                 error=str(exc),
                 error_stage=2,
                 status_code=422,
@@ -744,6 +777,7 @@ async def analyze(
             cv_filename=cv_filename,
             job_text=job_text,
             job_url=job_url,
+            advisor_ids=selected_advisor_ids,
             error="Add a public job link or paste the job description.",
             error_stage=2,
             status_code=422,
@@ -759,6 +793,7 @@ async def analyze(
             cv_filename=cv_filename,
             job_text=resolved_job,
             job_url=job_url,
+            advisor_ids=selected_advisor_ids,
             error=str(exc),
             error_stage=error_stage,
             status_code=422,
@@ -774,16 +809,26 @@ async def analyze(
             "anonymous-free-tier",
             resolved_cv,
             resolved_job,
+            selected_advisor_ids,
         )
     except BudgetExceededError:
+        ai_review, _, _ = DeterministicAiReviewer().review(
+            resolved_cv, resolved_job, selected_advisor_ids
+        )
         ai_notice = (
             "The shared free AI pool has reached its monthly $5 limit. "
             "The evidence review below still works without a model call."
         )
         emit("gemini.free_pool.exhausted")
     except RateLimitExceededError:
+        ai_review, _, _ = DeterministicAiReviewer().review(
+            resolved_cv, resolved_job, selected_advisor_ids
+        )
         ai_notice = "Free AI is limited to two attempts per minute. The evidence review still completed."
     except Exception as exc:
+        ai_review, _, _ = DeterministicAiReviewer().review(
+            resolved_cv, resolved_job, selected_advisor_ids
+        )
         ai_notice = (
             "Gemini is temporarily unavailable. The evidence review below was completed without a model call."
         )
@@ -798,6 +843,7 @@ async def analyze(
         assessment=assessment,
         ai_review=ai_review,
         ai_notice=ai_notice,
+        advisor_ids=selected_advisor_ids,
     )
 
 

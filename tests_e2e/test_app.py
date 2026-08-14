@@ -186,10 +186,10 @@ def test_job_url_is_primary_and_manual_description_is_fallback(page: Page, tmp_p
 def test_job_step_validates_missing_and_non_https_links(page: Page, tmp_path: Path) -> None:
     page.goto(f"{BASE_URL}/workspace")
     open_job_step(page, tmp_path)
-    page.get_by_test_id("analyze-button").click()
+    page.get_by_role("button", name="Choose your board").click()
     expect(page.locator("[data-source-error]")).to_contain_text("Add a public job link")
     page.get_by_test_id("job-url-input").fill("http://jobs.example/role")
-    page.get_by_test_id("analyze-button").click()
+    page.get_by_role("button", name="Choose your board").click()
     expect(page.locator("[data-source-error]")).to_contain_text("complete HTTPS job link")
 
 
@@ -210,10 +210,38 @@ def test_uploaded_cv_and_manual_job_complete_review(page: Page, tmp_path: Path) 
     job_text = "Python Kubernetes Terraform platform leadership"
     page.get_by_test_id("job-input").fill(job_text)
     expect(page.locator('[data-char-count="job-text"]')).to_have_text(str(len(job_text)))
+    page.get_by_role("button", name="Choose your board").click()
+    expect(page.get_by_role("heading", name="Choose who reviews your application.")).to_be_visible()
+    expect(page.locator("[data-advisor-count]")).to_have_text("3")
     page.get_by_test_id("analyze-button").click()
     expect(page.get_by_test_id("results")).to_be_visible()
     expect(page.get_by_test_id("evidence-gaps")).to_contain_text("kubernetes")
     expect(page.get_by_test_id("json-result")).to_contain_text('"schema_version": "1.0"')
+
+
+def test_board_selection_is_interactive_bounded_and_has_visible_progress(
+    page: Page, tmp_path: Path
+) -> None:
+    page.goto(f"{BASE_URL}/workspace")
+    open_job_step(page, tmp_path)
+    page.get_by_text("Paste the job description instead", exact=False).click()
+    page.get_by_test_id("job-input").fill("Python platform leadership")
+    page.get_by_role("button", name="Choose your board").click()
+    options = page.locator("[data-advisor-option]")
+    cards = page.locator(".advisor-option")
+    expect(options).to_have_count(6)
+    cards.nth(0).click()
+    expect(page.locator("[data-advisor-count]")).to_have_text("2")
+    cards.nth(3).click()
+    expect(page.locator("[data-advisor-count]")).to_have_text("3")
+    expect(options.nth(4)).to_be_disabled()
+    page.locator("[data-testid='guided-form']").evaluate(
+        "form => form.addEventListener('submit', event => event.preventDefault(), {once: true})"
+    )
+    page.get_by_test_id("analyze-button").click()
+    expect(page.locator("[data-analysis-overlay]")).to_be_visible()
+    expect(page.get_by_text("Board in session")).to_be_visible()
+    expect(page.locator("[data-analysis-advisors] span")).to_have_count(3)
 
 
 def test_pasted_cv_fallback_still_completes_review(page: Page) -> None:
@@ -224,6 +252,7 @@ def test_pasted_cv_fallback_still_completes_review(page: Page) -> None:
     page.get_by_role("button", name="Continue to job").click()
     page.get_by_text("Paste the job description instead", exact=False).click()
     page.get_by_test_id("job-input").fill("Python backend systems")
+    page.get_by_role("button", name="Choose your board").click()
     page.get_by_test_id("analyze-button").click()
     expect(page.get_by_test_id("results")).to_be_visible()
 
@@ -235,6 +264,10 @@ def test_synthetic_demo_renders_and_downloads_valid_json(page: Page) -> None:
     expect(page.get_by_test_id("score")).not_to_have_text("0")
     expect(page.get_by_test_id("score-disclaimer")).to_contain_text("commercial ATS")
     expect(page.get_by_role("heading", name="How the board reached the finding")).to_be_visible()
+    expect(page.get_by_role("heading", name="Three perspectives, one decision")).to_be_visible()
+    expect(page.locator(".advisor-verdict")).to_have_count(3)
+    expect(page.get_by_role("heading", name="Safe, high-impact edits")).to_be_visible()
+    expect(page.get_by_role("heading", name="Questions to prepare")).to_be_visible()
     page.get_by_text("Structured assessment").click()
     with page.expect_download() as download_info:
         page.get_by_test_id("download-json-button").click()
@@ -273,6 +306,7 @@ def test_primary_flows_have_clean_browser_console(page: Page, tmp_path: Path) ->
     page.get_by_role("button", name="Continue to job").click()
     page.get_by_text("Paste the job description instead", exact=False).click()
     page.get_by_test_id("job-input").fill("Python services")
+    page.get_by_role("button", name="Choose your board").click()
     page.get_by_test_id("analyze-button").click()
     expect(page.get_by_test_id("results")).to_be_visible()
     assert messages == []

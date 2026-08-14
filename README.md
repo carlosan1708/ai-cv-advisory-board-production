@@ -6,6 +6,8 @@ The product has two access tiers: a no-login, session-only Gemini review backed 
 
 The private workspace now treats CVs as independent, versioned assets: members can review a CV without an application, edit extracted text into a new immutable version, and later compare an attached version against a tracked role. See [Spec 009](docs/specs/009-cv-library-and-navigation.md).
 
+The free review now restores the advisory-board experience from the Streamlit prototype without restoring its multi-call cost: users select up to three specialists, one bounded Gemini call produces the complete grounded report, and the UI presents advisor verdicts, safe tailoring moves, and interview preparation. See [Spec 015](docs/specs/015-free-advisory-board-experience.md).
+
 An entire application search can be archived before starting fresh. Active applications and CV versions move together into owner-scoped, read-only History, where members can inspect past applications, see attached CV versions, and download the original files without changing the active workspace. See [Spec 014](docs/specs/014-workspace-history.md).
 
 The application dashboard now leads with a plain-language AI Expert Panel, while a verified HTTP-only session keeps members signed in across Dashboard, CV Library, and Access. See [Spec 010](docs/specs/010-expert-panel-and-session.md).

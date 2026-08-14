@@ -99,8 +99,41 @@ def test_gemini_adapter_requests_strict_bounded_json() -> None:
     assert (input_tokens, output_tokens) == (500, 100)
     assert captured["model"] == "gemini-2.5-flash"
     config = captured["config"]
-    assert config.max_output_tokens == 1_024  # type: ignore[union-attr]
+    assert config.max_output_tokens == 2_048  # type: ignore[union-attr]
     assert config.response_mime_type == "application/json"  # type: ignore[union-attr]
+
+
+def test_gemini_board_uses_only_selected_advisor_briefs() -> None:
+    captured: dict[str, object] = {}
+    expected = EvidenceReview(
+        fit_score=72,
+        summary="Grounded board consensus",
+        supported_strengths=["Python delivery"],
+        evidence_gaps=["FinOps"],
+        next_actions=["Quantify impact"],
+    )
+
+    class Models:
+        def generate_content(self, **kwargs):  # type: ignore[no-untyped-def]
+            captured.update(kwargs)
+            return SimpleNamespace(
+                parsed=expected,
+                text=expected.model_dump_json(),
+                usage_metadata=SimpleNamespace(
+                    prompt_token_count=400,
+                    candidates_token_count=100,
+                    thoughts_token_count=0,
+                ),
+            )
+
+    reviewer = GeminiAiReviewer.__new__(GeminiAiReviewer)
+    reviewer.client = SimpleNamespace(models=Models())
+    reviewer.model = "gemini-2.5-flash"
+    reviewer.review("CV", "JOB", ["executive", "impact", "unknown"])
+    prompt = str(captured["contents"])
+    assert "executive: Executive Story Editor" in prompt
+    assert "impact: Impact & ROI Reviewer" in prompt
+    assert "Technical Recruiter" not in prompt
 
 
 def test_budgeted_service_enforces_user_and_project_caps() -> None:

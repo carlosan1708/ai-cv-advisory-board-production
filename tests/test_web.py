@@ -278,7 +278,7 @@ def test_application_ai_review_requires_cv_and_job_then_persists_summary() -> No
     assert stored["ai_summary"]
 
 
-def test_workspace_starts_three_stage_review() -> None:
+def test_workspace_starts_four_stage_advisory_board_review() -> None:
     response = client.get("/workspace")
     assert response.status_code == 200
     assert "Upload the CV you want reviewed" in response.text
@@ -287,8 +287,11 @@ def test_workspace_starts_three_stage_review() -> None:
     assert "Paste CV text instead" in response.text
     assert "CV" in response.text
     assert "Job" in response.text
+    assert "Board" in response.text
     assert "Report" in response.text
-    assert 'src="/static/app.js?v=6"' in response.text
+    assert "Choose who reviews your application" in response.text
+    assert "Technical Recruiter" in response.text
+    assert 'src="/static/app.js?v=8"' in response.text
     assert 'enctype="multipart/form-data"' in response.text
 
 
@@ -307,6 +310,8 @@ def test_workspace_script_includes_guidance_and_export() -> None:
     assert "showStep" in response.text
     assert "maximumFileSize" in response.text
     assert "validateTarget" in response.text
+    assert "renderAdvisorSelection" in response.text
+    assert "showAnalysisProgress" in response.text
     assert "data-char-count" in response.text
     assert "data-download-json" in response.text
 
@@ -316,6 +321,9 @@ def test_demo_renders_complete_board_finding() -> None:
     assert response.status_code == 200
     assert 'data-testid="results"' in response.text
     assert "Advisor lenses" in response.text
+    assert "Three perspectives, one decision" in response.text
+    assert "Safe, high-impact edits" in response.text
+    assert "Questions to prepare" in response.text
     assert "Requirement by requirement" in response.text
     assert "commercial ATS" in response.text
     assert 'data-testid="download-json-button"' in response.text
@@ -356,6 +364,35 @@ def test_uploaded_cv_and_job_url_complete_review(monkeypatch: pytest.MonkeyPatch
     assert response.status_code == 200
     assert 'data-testid="results"' in response.text
     assert requested_urls == ["https://jobs.example/platform-engineer"]
+
+
+def test_selected_advisors_reach_one_bounded_board_call(monkeypatch: pytest.MonkeyPatch) -> None:
+    selected: list[str] = []
+
+    class FakeBoardService:
+        def review(
+            self, owner_id: str, cv_text: str, job_text: str, advisor_ids: list[str]
+        ) -> web.EvidenceReview:
+            assert owner_id == "anonymous-free-tier"
+            assert cv_text.startswith("EXPERIENCE")
+            assert job_text == "Python platform leadership"
+            selected.extend(advisor_ids)
+            return web.DeterministicAiReviewer().review(cv_text, job_text, advisor_ids)[0]
+
+    monkeypatch.setattr(web, "free_ai_service", lambda: FakeBoardService())
+    monkeypatch.setattr(web, "_enforce_ai_rate", lambda *_: None)
+    response = client.post(
+        "/analyze",
+        data={
+            "cv_text": "EXPERIENCE\nBuilt Python platforms",
+            "job_text": "Python platform leadership",
+            "advisor_ids": "executive,impact,unknown,executive",
+        },
+    )
+    assert response.status_code == 200
+    assert selected == ["executive", "impact"]
+    assert "Executive Story Editor" in response.text
+    assert "Impact &amp; ROI Reviewer" in response.text
 
 
 def test_manual_job_description_takes_precedence_over_url(monkeypatch: pytest.MonkeyPatch) -> None:
