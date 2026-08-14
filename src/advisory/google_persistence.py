@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
+from advisory.ai_audit import AiAuditEvent
 from advisory.budget import BudgetExceededError, BudgetSnapshot, Reservation
 from advisory.career import (
     Application,
@@ -12,6 +13,32 @@ from advisory.career import (
     WorkspaceArchiveDetail,
 )
 from advisory.career_repository import EmptyWorkspaceError, NotFoundError
+
+
+class FirestoreAiAuditRepository:
+    """Admin-only AI operations ledger. It deliberately excludes source and generated text."""
+
+    def __init__(self, project: str) -> None:
+        import google.cloud.firestore as firestore
+
+        self.firestore = firestore
+        self.collection = firestore.Client(project=project).collection("ai_audit_events")
+
+    def record(self, event: AiAuditEvent) -> None:
+        self.collection.document(event.id).set(event.model_dump(mode="json"))
+
+    def list_recent(self, limit: int = 50) -> list[AiAuditEvent]:
+        bounded_limit = max(1, min(limit, 500))
+        query = self.collection.order_by(
+            "created_at", direction=self.firestore.Query.DESCENDING
+        ).limit(bounded_limit)
+        return [AiAuditEvent.model_validate(item.to_dict()) for item in query.stream()]
+
+    def count_since(self, since: datetime) -> int:
+        from google.cloud.firestore_v1.base_query import FieldFilter
+
+        query = self.collection.where(filter=FieldFilter("created_at", ">=", since))
+        return sum(1 for _ in query.stream())
 
 
 class GoogleCareerRepository:

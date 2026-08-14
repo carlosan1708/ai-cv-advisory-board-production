@@ -3,7 +3,9 @@ from __future__ import annotations
 import hashlib
 import json
 from collections.abc import Awaitable, Callable
+from datetime import UTC, datetime
 from pathlib import Path
+from typing import Protocol, cast
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse, Response
@@ -28,14 +30,24 @@ from advisory.advisors import (
 )
 from advisory.ai import (
     AiReviewer,
+    AiUsage,
     BudgetedAiService,
     BudgetedCvService,
+    CvReview,
     CvReviewer,
     DeterministicAiReviewer,
     DeterministicCvReviewer,
     EvidenceReview,
     GeminiAiReviewer,
     GeminiCvReviewer,
+    MeteredCvReview,
+    MeteredEvidenceReview,
+)
+from advisory.ai_audit import (
+    AiAuditEvent,
+    AiAuditRepository,
+    AuditStatus,
+    InMemoryAiAuditRepository,
 )
 from advisory.auth import IdentityVerifier, UserIdentity
 from advisory.budget import BudgetExceededError, BudgetLedger, InMemoryBudgetLedger
@@ -48,7 +60,11 @@ from advisory.career_repository import (
 )
 from advisory.demo import DEMO_CV, DEMO_JOB
 from advisory.domain import Assessment
-from advisory.google_persistence import FirestoreBudgetLedger, GoogleCareerRepository
+from advisory.google_persistence import (
+    FirestoreAiAuditRepository,
+    FirestoreBudgetLedger,
+    GoogleCareerRepository,
+)
 from advisory.ingestion import (
     CvDocumentError,
     CvDocumentParser,
@@ -133,12 +149,14 @@ if settings.repository_backend == "firestore":
         settings.gcp_project, settings.project_ai_monthly_limit_micro_usd
     )
     access_control: AccessControl = FirestoreAccessControl(settings.gcp_project, admin_emails)
+    ai_audit_repository: AiAuditRepository = FirestoreAiAuditRepository(settings.gcp_project)
 else:
     career_repository = InMemoryCareerRepository()
     free_budget_ledger = InMemoryBudgetLedger(settings.ai_monthly_limit_micro_usd)
     member_budget_ledger = InMemoryBudgetLedger(settings.member_ai_monthly_limit_micro_usd)
     project_budget_ledger = InMemoryBudgetLedger(settings.project_ai_monthly_limit_micro_usd)
     access_control = InMemoryAccessControl(admin_emails, allow_all=settings.auth_mode == "development")
+    ai_audit_repository = InMemoryAiAuditRepository()
 
 ai_rate_limiter = SlidingWindowRateLimiter()
 PROJECT_BUDGET_OWNER = "_project-emergency-cap"
@@ -243,6 +261,59 @@ def _budget_payload(ledger: BudgetLedger, owner: str) -> dict[str, int]:
     }
 
 
+def _record_ai_audit(event: AiAuditEvent) -> None:
+    try:
+        ai_audit_repository.record(event)
+    except Exception as exc:
+        emit("ai.audit.write_failed", error_type=type(exc).__name__)
+
+
+class _BasicBoardService(Protocol):
+    def review(
+        self,
+        owner: str,
+        cv_text: str,
+        job_text: str,
+        advisor_ids: list[str] | None = None,
+    ) -> EvidenceReview: ...
+
+
+class _BasicCvService(Protocol):
+    def review(self, owner: str, cv_text: str) -> CvReview: ...
+
+
+def _board_review_with_usage(
+    review_service: object,
+    owner: str,
+    cv_text: str,
+    job_text: str,
+    advisor_ids: list[str] | None = None,
+) -> tuple[EvidenceReview, AiUsage | None]:
+    detailed_review = getattr(review_service, "review_with_usage", None)
+    if callable(detailed_review):
+        result = detailed_review(owner, cv_text, job_text, advisor_ids)
+        if isinstance(result, MeteredEvidenceReview):
+            return result.review, result.usage
+    return cast(_BasicBoardService, review_service).review(
+        owner, cv_text, job_text, advisor_ids
+    ), None
+
+
+def _cv_review_with_usage(
+    review_service: object, owner: str, cv_text: str
+) -> tuple[CvReview, AiUsage | None]:
+    detailed_review = getattr(review_service, "review_with_usage", None)
+    if callable(detailed_review):
+        result = detailed_review(owner, cv_text)
+        if isinstance(result, MeteredCvReview):
+            return result.review, result.usage
+    return cast(_BasicCvService, review_service).review(owner, cv_text), None
+
+
+def _score_band(score: int) -> str:
+    return "strong" if score >= 75 else "partial" if score >= 45 else "weak"
+
+
 def free_budget() -> dict[str, int]:
     return _budget_payload(free_budget_ledger, "anonymous-free-tier")
 
@@ -279,7 +350,9 @@ def render(
     advisor_ids: list[str] | None = None,
     status_code: int = 200,
 ) -> HTMLResponse:
-    selected_advisor_ids = normalize_advisor_ids([] if advisor_ids is None else advisor_ids)
+    selected_advisor_ids = normalize_advisor_ids(
+        list(DEFAULT_ADVISOR_IDS) if advisor_ids is None else advisor_ids
+    )
     assessment_json = json.dumps(assessment.model_dump(), indent=2) if assessment else ""
     return templates.TemplateResponse(
         request=request,
@@ -422,6 +495,59 @@ def request_workspace_access(request: Request) -> dict[str, object]:
 def list_workspace_access(request: Request) -> list[dict[str, object]]:
     records = access_control.list_records(identity(request))
     return [record.model_dump(mode="json") for record in records]
+
+
+@app.get("/api/admin/usage")
+def admin_ai_usage(request: Request) -> dict[str, object]:
+    admin_user = identity(request)
+    access_control.require_admin(admin_user)
+    access_records = access_control.list_records(admin_user)
+    owner_labels = {record.subject: record.email for record in access_records if record.subject}
+    owner_labels[admin_user.subject] = admin_user.email
+
+    members: list[dict[str, object]] = []
+    seen_subjects: set[str] = set()
+    approved_identities = [
+        (record.subject, record.email)
+        for record in access_records
+        if record.status == "approved" and record.subject
+    ]
+    approved_identities.append((admin_user.subject, admin_user.email))
+    for subject, email in approved_identities:
+        if subject in seen_subjects:
+            continue
+        seen_subjects.add(subject)
+        members.append({"email": email, **_budget_payload(member_budget_ledger, subject)})
+
+    events = ai_audit_repository.list_recent(100)
+    event_payloads: list[dict[str, object]] = []
+    for event in events:
+        payload = event.model_dump(mode="json", exclude={"owner_id"})
+        payload["owner_label"] = (
+            "Anonymous free review"
+            if event.access_tier == "anonymous"
+            else owner_labels.get(event.owner_id, "Approved member")
+        )
+        event_payloads.append(payload)
+
+    now = datetime.now(UTC)
+    current_month = now.strftime("%Y-%m")
+    reviews_this_month = ai_audit_repository.count_since(
+        datetime(now.year, now.month, 1, tzinfo=UTC)
+    )
+    return {
+        "month": current_month,
+        "model": settings.gemini_model,
+        "privacy_note": "Operational metadata only. CV text, job text, and generated prose are not stored.",
+        "free": _budget_payload(free_budget_ledger, "anonymous-free-tier"),
+        "project": _budget_payload(project_budget_ledger, PROJECT_BUDGET_OWNER),
+        "members": members,
+        "member_used_micro_usd": sum(
+            cast(int, member["used_micro_usd"]) for member in members
+        ),
+        "reviews_this_month": reviews_this_month,
+        "recent_reviews": event_payloads,
+    }
 
 
 @app.post("/api/admin/access", status_code=201)
@@ -601,9 +727,57 @@ async def standalone_cv_review(request: Request, cv_version_id: str) -> dict[str
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     try:
         _enforce_ai_rate(owner, settings.member_ai_requests_per_minute, "approved")
-        review = await run_in_threadpool(member_cv_service().review, owner, version.extracted_text)
-    except (BudgetExceededError, RateLimitExceededError) as exc:
+        review, usage = await run_in_threadpool(
+            _cv_review_with_usage, member_cv_service(), owner, version.extracted_text
+        )
+    except BudgetExceededError as exc:
+        _record_ai_audit(
+            AiAuditEvent.new(
+                owner_id=owner,
+                access_tier="approved",
+                review_type="cv",
+                status="budget_limited",
+                model=settings.gemini_model,
+            )
+        )
         raise HTTPException(status_code=429, detail=str(exc)) from exc
+    except RateLimitExceededError as exc:
+        _record_ai_audit(
+            AiAuditEvent.new(
+                owner_id=owner,
+                access_tier="approved",
+                review_type="cv",
+                status="rate_limited",
+                model=settings.gemini_model,
+            )
+        )
+        raise HTTPException(status_code=429, detail=str(exc)) from exc
+    except Exception:
+        _record_ai_audit(
+            AiAuditEvent.new(
+                owner_id=owner,
+                access_tier="approved",
+                review_type="cv",
+                status="provider_error",
+                model=settings.gemini_model,
+            )
+        )
+        raise
+    _record_ai_audit(
+        AiAuditEvent.new(
+            owner_id=owner,
+            access_tier="approved",
+            review_type="cv",
+            status="gemini",
+            score=review.quality_score,
+            band=_score_band(review.quality_score),
+            model=usage.model if usage else settings.gemini_model,
+            input_tokens=usage.input_tokens if usage else 0,
+            output_tokens=usage.output_tokens if usage else 0,
+            actual_micro_usd=usage.actual_micro_usd if usage else 0,
+            duration_ms=usage.duration_ms if usage else 0,
+        )
+    )
     return {"review": review.model_dump(), "budget": _budget_payload(member_budget_ledger, owner)}
 
 
@@ -653,14 +827,61 @@ async def application_ai_review(
     owner = owner_id(request)
     try:
         _enforce_ai_rate(owner, settings.member_ai_requests_per_minute, "approved")
-        review = await run_in_threadpool(
-            member_ai_service().review,
+        review, usage = await run_in_threadpool(
+            _board_review_with_usage,
+            member_ai_service(),
             owner,
             version.extracted_text,
             resolved_job,
         )
-    except (BudgetExceededError, RateLimitExceededError) as exc:
+    except BudgetExceededError as exc:
+        _record_ai_audit(
+            AiAuditEvent.new(
+                owner_id=owner,
+                access_tier="approved",
+                review_type="application",
+                status="budget_limited",
+                model=settings.gemini_model,
+            )
+        )
         raise HTTPException(status_code=429, detail=str(exc)) from exc
+    except RateLimitExceededError as exc:
+        _record_ai_audit(
+            AiAuditEvent.new(
+                owner_id=owner,
+                access_tier="approved",
+                review_type="application",
+                status="rate_limited",
+                model=settings.gemini_model,
+            )
+        )
+        raise HTTPException(status_code=429, detail=str(exc)) from exc
+    except Exception:
+        _record_ai_audit(
+            AiAuditEvent.new(
+                owner_id=owner,
+                access_tier="approved",
+                review_type="application",
+                status="provider_error",
+                model=settings.gemini_model,
+            )
+        )
+        raise
+    _record_ai_audit(
+        AiAuditEvent.new(
+            owner_id=owner,
+            access_tier="approved",
+            review_type="application",
+            status="gemini",
+            score=review.fit_score,
+            band=_score_band(review.fit_score),
+            model=usage.model if usage else settings.gemini_model,
+            input_tokens=usage.input_tokens if usage else 0,
+            output_tokens=usage.output_tokens if usage else 0,
+            actual_micro_usd=usage.actual_micro_usd if usage else 0,
+            duration_ms=usage.duration_ms if usage else 0,
+        )
+    )
     career_repository.update_application(
         owner_id(request),
         application_id,
@@ -816,18 +1037,22 @@ async def analyze(
     ai_review: EvidenceReview | None = None
     ai_notice = ""
     ai_degraded = False
+    audit_status: AuditStatus = "gemini"
+    usage: AiUsage | None = None
     try:
         _enforce_ai_rate(
             _anonymous_rate_key(request), settings.anonymous_ai_requests_per_minute, "anonymous"
         )
-        ai_review = await run_in_threadpool(
-            free_ai_service().review,
+        ai_review, usage = await run_in_threadpool(
+            _board_review_with_usage,
+            free_ai_service(),
             "anonymous-free-tier",
             resolved_cv,
             resolved_job,
             selected_advisor_ids,
         )
     except BudgetExceededError:
+        audit_status = "budget_limited"
         ai_degraded = True
         ai_review, _, _ = DeterministicAiReviewer().review(
             resolved_cv, resolved_job, selected_advisor_ids
@@ -838,12 +1063,14 @@ async def analyze(
         )
         emit("gemini.free_pool.exhausted")
     except RateLimitExceededError:
+        audit_status = "rate_limited"
         ai_degraded = True
         ai_review, _, _ = DeterministicAiReviewer().review(
             resolved_cv, resolved_job, selected_advisor_ids
         )
         ai_notice = "Free AI is limited to two attempts per minute. The evidence review still completed."
     except Exception as exc:
+        audit_status = "fallback"
         ai_degraded = True
         ai_review, _, _ = DeterministicAiReviewer().review(
             resolved_cv, resolved_job, selected_advisor_ids
@@ -852,6 +1079,22 @@ async def analyze(
             "Gemini is temporarily unavailable. The evidence review below was completed without a model call."
         )
         emit("gemini.free_pool.fallback", error_type=type(exc).__name__)
+    _record_ai_audit(
+        AiAuditEvent.new(
+            owner_id="anonymous-free-tier",
+            access_tier="anonymous",
+            review_type="job_match",
+            status=audit_status,
+            advisor_ids=selected_advisor_ids,
+            score=assessment.score,
+            band=assessment.band,
+            model=usage.model if usage else settings.gemini_model,
+            input_tokens=usage.input_tokens if usage else 0,
+            output_tokens=usage.output_tokens if usage else 0,
+            actual_micro_usd=usage.actual_micro_usd if usage else 0,
+            duration_ms=usage.duration_ms if usage else 0,
+        )
+    )
     return render(
         request,
         cv_text=resolved_cv,

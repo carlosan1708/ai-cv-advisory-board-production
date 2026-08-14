@@ -26,6 +26,28 @@ def test_requirement_extraction_prefers_meaningful_phrases() -> None:
     assert not {"need", "senior", "engineer", "experience"}.intersection(terms)
 
 
+def test_requirement_extraction_rejects_job_page_boilerplate() -> None:
+    terms = MatchPolicy().extract_requirements(
+        "Not What Who Forward Deployed Customer Data Services Build Business Code Learn "
+        "Python AWS Kubernetes Terraform technical leadership"
+    )
+    assert terms == ["python", "aws", "kubernetes", "terraform", "technical leadership"]
+    assert not {
+        "not",
+        "what",
+        "who",
+        "forward",
+        "deployed",
+        "customer",
+        "data",
+        "services",
+        "build",
+        "business",
+        "code",
+        "learn",
+    }.intersection(terms)
+
+
 def test_empty_job_is_safe() -> None:
     result = MatchPolicy().assess("EXPERIENCE", "")
     assert result.score <= 20

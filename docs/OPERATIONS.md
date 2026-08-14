@@ -7,7 +7,8 @@
 - Region: `us-central1`
 - Runtime: stateless Cloud Run container, scale-to-zero allowed
 - Health contract: `GET /api/health` returns `{"status":"ok"}`
-- Firestore: owner-scoped applications, CV metadata/extracted text, and monthly AI ledgers
+- Firestore: owner-scoped applications, CV metadata/extracted text, monthly AI ledgers, and metadata-only
+  AI audit events
 - Cloud Storage: private immutable CV bytes in `users/{subject}/cv-versions/...`
 - Vertex AI model: `gemini-2.5-flash`, global endpoint, thinking disabled
 - Identity: Google ID token; stable `sub` claim is the owner key
@@ -42,6 +43,7 @@ The `advisory` logger emits one-line JSON events:
 | `security.cross_site_blocked` | route, method, fetch metadata | Cross-site mutation attempts |
 | `security.ai_burst_blocked` | access tier | AI burst guard activations |
 | `workspace.archived/archive_viewed` | opaque owner/archive IDs and record counts | Read-only workspace-history lifecycle |
+| `ai.audit.write_failed` | error type | Audit-store availability without exposing review content |
 
 The logging safety filter removes document text, filenames, credentials, prompts, and full URLs even when
 those fields are passed accidentally.

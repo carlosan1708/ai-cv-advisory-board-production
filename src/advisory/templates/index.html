@@ -146,12 +146,12 @@
               <span class="board-selection-count"><strong data-advisor-count>{{ selected_advisor_ids | length }}</strong> of 3 selected</span>
             </div>
             <div class="board-presets" aria-label="Panel presets">
-              <button type="button" data-advisor-preset="recruiter,hiring_manager,technical">Balanced</button>
+              <button type="button" data-advisor-preset="recruiter,hiring_manager,technical" {% if selected_advisor_ids == ['recruiter', 'hiring_manager', 'technical'] %}class="active" aria-pressed="true"{% else %}aria-pressed="false"{% endif %}>Balanced</button>
               <button type="button" data-advisor-preset="technical,impact,startup">Builder</button>
               <button type="button" data-advisor-preset="hiring_manager,executive,impact">Leadership</button>
-              <button type="button" class="board-clear" data-advisor-clear disabled>Clear</button>
+              <button type="button" class="board-clear" data-advisor-clear {% if not selected_advisor_ids %}disabled{% endif %}>Clear</button>
             </div>
-            <div class="board-roster" data-advisor-summary aria-live="polite">No specialists selected yet.</div>
+            <div class="board-roster" data-advisor-summary aria-live="polite">{% if selected_advisors %}{% for advisor in selected_advisors %}<span>{{ advisor.name }}</span>{% endfor %}{% else %}No specialists selected yet.{% endif %}</div>
             <p class="board-selection-guidance" data-advisor-guidance>Choose at least one specialist. You can mix any three roles.</p>
           </section>
           <div class="advisor-picker" data-advisor-picker>
@@ -305,7 +305,7 @@
 
       <div class="findings-layout">
         <section class="evidence-ledger" aria-labelledby="ledger-title">
-          <div class="result-section-heading compact"><div><span class="overline">Evidence ledger</span><h2 id="ledger-title">Requirement by requirement</h2></div><span>{{ assessment.requirements | length }} reviewed</span></div>
+          <div class="result-section-heading compact"><div><span class="overline">Evidence ledger</span><h2 id="ledger-title">Priority requirement evidence</h2><p>Meaningful skills and responsibilities detected in the job post.</p></div><span>{{ assessment.requirements | length }} reviewed</span></div>
           <div class="evidence-list">
             {% for requirement in assessment.requirements %}
             <article class="evidence-row {% if requirement.matched %}is-supported{% else %}is-missing{% endif %}">
@@ -343,7 +343,7 @@
 
   <footer class="app-footer workspace-footer">
     <span>AI CV Advisory Board</span>
-    <span>Evidence-linked &middot; No fabricated claims &middot; No persistence</span>
+    <span>Evidence-linked &middot; No fabricated claims &middot; No source-document persistence</span>
     <span>Baseline 1.0</span>
   </footer>
 </body>

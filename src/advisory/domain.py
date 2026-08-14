@@ -12,20 +12,43 @@ STOPWORDS = frozenset(
     "your candidate candidates engineering engineer engineers experience experienced job looking need needs "
     "preferred required requirement requirements role senior strong team teams work working years".split()
 )
+BOILERPLATE_TERMS = frozenset(
+    "about accept account all also apply benefits build business careers code company "
+    "contact cookie cookies customer data deployed description details equal forward help home learn "
+    "legal login more next not open page people policy privacy read save search service services share "
+    "sign similar site support terms today view what where who why".split()
+)
+KNOWN_REQUIREMENT_TERMS = frozenset(
+    "accessibility agile ai analytics architecture ats aws azure coaching communication compliance css "
+    "cybersecurity django docker fastapi figma finops flask gcp git github golang graphql hadoop "
+    "infrastructure java "
+    "javascript kafka kubernetes langchain leadership llm mentoring microservices ml mongodb mysql node "
+    "observability ownership postgresql product prototyping python pytorch react redis reliability "
+    "research rust scalability scrum security spark sql stakeholder strategy tensorflow terraform "
+    "testing typography typescript ux vue".split()
+)
 CURATED_PHRASES = (
     "artificial intelligence",
     "automated testing",
     "computer vision",
     "continuous delivery",
     "continuous integration",
+    "cross-functional leadership",
+    "customer experience",
     "data engineering",
+    "data science",
     "distributed systems",
     "generative ai",
     "google cloud",
     "machine learning",
     "natural language processing",
+    "people management",
     "project management",
+    "retrieval augmented generation",
+    "site reliability",
     "software architecture",
+    "technical leadership",
+    "user research",
 )
 SECTIONS = {
     "experience": ("experience", "employment", "work history"),
@@ -78,8 +101,31 @@ class MatchPolicy:
             counts[phrase] = job_lower.count(phrase)
             first_index[phrase] = job_lower.index(phrase)
 
-        for token in self.tokens(job_text):
-            if len(token) < 3 or token in STOPWORDS or token in phrase_tokens:
+        raw_tokens = WORD_RE.findall(job_text)
+        normalized_tokens = [token.lower().strip(".-/") for token in raw_tokens]
+        token_counts: dict[str, int] = {}
+        for token in normalized_tokens:
+            token_counts[token] = token_counts.get(token, 0) + 1
+
+        for raw_token, token in zip(raw_tokens, normalized_tokens, strict=True):
+            if (
+                len(token) < 2
+                or token in STOPWORDS
+                or token in BOILERPLATE_TERMS
+                or token in phrase_tokens
+            ):
+                continue
+            is_acronym = raw_token.isupper() and raw_token.isalpha() and 2 <= len(raw_token) <= 8
+            is_technical_shape = any(character in raw_token for character in "+#./-") or any(
+                character.isdigit() for character in raw_token
+            )
+            is_meaningful = (
+                token in KNOWN_REQUIREMENT_TERMS
+                or is_acronym
+                or is_technical_shape
+                or (token_counts[token] >= 2 and len(token) >= 4)
+            )
+            if not is_meaningful:
                 continue
             counts[token] = counts.get(token, 0) + 1
             first_index.setdefault(token, job_lower.find(token))

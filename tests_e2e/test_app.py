@@ -43,6 +43,28 @@ def test_home_presents_free_and_private_modes(page: Page) -> None:
     expect(page.get_by_role("heading", name="Your search, at a glance.")).to_be_visible()
 
 
+def test_admin_control_center_shows_usage_and_privacy_boundary(page: Page) -> None:
+    page.goto(f"{BASE_URL}/admin")
+    expect(page.get_by_role("heading", name="Know what the app is doing.")).to_be_visible()
+    expect(page.get_by_text("Project AI spend", exact=True)).to_be_visible()
+    expect(page.get_by_text("Free review pool", exact=True)).to_be_visible()
+    expect(page.get_by_role("heading", name="Recent AI reviews")).to_be_visible()
+    expect(page.get_by_text("CV text, job text, and generated prose are not stored.")).to_be_visible()
+    expect(page.get_by_role("heading", name="Access control")).to_be_visible()
+
+
+def test_admin_control_center_has_no_mobile_overflow(page: Page) -> None:
+    page.set_viewport_size({"width": 390, "height": 844})
+    page.goto(f"{BASE_URL}/admin")
+    expect(page.get_by_role("heading", name="Know what the app is doing.")).to_be_visible()
+    dimensions = page.evaluate(
+        "() => ({ viewport: document.documentElement.clientWidth, "
+        "content: document.documentElement.scrollWidth })"
+    )
+    assert dimensions["content"] <= dimensions["viewport"]
+    expect(page.get_by_text("Project AI spend", exact=True)).to_be_visible()
+
+
 def test_cv_library_reviews_and_saves_a_new_version(page: Page, tmp_path: Path) -> None:
     page.goto(f"{BASE_URL}/cvs")
     label = f"Standalone CV {uuid4().hex[:6]}"
@@ -219,12 +241,31 @@ def test_uploaded_cv_and_manual_job_complete_review(page: Page, tmp_path: Path) 
     expect(page.locator('[data-char-count="job-text"]')).to_have_text(str(len(job_text)))
     page.get_by_role("button", name="Choose your board").click()
     expect(page.get_by_role("heading", name="Assemble your advisory board.")).to_be_visible()
-    expect(page.locator("[data-advisor-count]")).to_have_text("0")
-    select_balanced_board(page)
+    expect(page.locator("[data-advisor-count]")).to_have_text("3")
+    expect(page.get_by_role("button", name="Balanced", exact=True)).to_have_attribute(
+        "aria-pressed", "true"
+    )
     page.get_by_test_id("analyze-button").click()
     expect(page.get_by_test_id("results")).to_be_visible()
     expect(page.get_by_test_id("evidence-gaps")).to_contain_text("kubernetes")
     expect(page.get_by_test_id("json-result")).to_contain_text('"schema_version": "1.0"')
+
+
+def test_evidence_ledger_ignores_job_page_boilerplate(page: Page, tmp_path: Path) -> None:
+    page.goto(f"{BASE_URL}/workspace")
+    open_job_step(page, tmp_path)
+    page.get_by_text("Paste the job description instead", exact=False).click()
+    page.get_by_test_id("job-input").fill(
+        "Not What Who Forward Deployed Customer Data Services Build Business Code Learn "
+        "Python AWS Kubernetes Terraform technical leadership"
+    )
+    page.get_by_role("button", name="Choose your board").click()
+    page.get_by_test_id("analyze-button").click()
+    ledger = page.locator(".evidence-ledger")
+    expect(ledger.get_by_role("heading", name="Priority requirement evidence")).to_be_visible()
+    expect(ledger.get_by_role("heading", name="python", exact=True)).to_be_visible()
+    expect(ledger.get_by_role("heading", name="Not", exact=True)).to_have_count(0)
+    expect(ledger.get_by_role("heading", name="What", exact=True)).to_have_count(0)
 
 
 def test_board_selection_is_interactive_bounded_and_has_visible_progress(
@@ -238,6 +279,12 @@ def test_board_selection_is_interactive_bounded_and_has_visible_progress(
     options = page.locator("[data-advisor-option]")
     cards = page.locator(".advisor-option")
     expect(options).to_have_count(6)
+    expect(page.locator("[data-advisor-count]")).to_have_text("3")
+    expect(page.get_by_role("button", name="Balanced", exact=True)).to_have_attribute(
+        "aria-pressed", "true"
+    )
+    expect(options.nth(4)).to_be_disabled()
+    page.get_by_role("button", name="Clear", exact=True).click()
     expect(page.locator("[data-advisor-count]")).to_have_text("0")
     expect(options.nth(4)).to_be_enabled()
     page.get_by_test_id("analyze-button").click()

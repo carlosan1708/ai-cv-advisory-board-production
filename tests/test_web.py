@@ -2,6 +2,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from advisory import web
+from advisory.ai_audit import AiAuditEvent, InMemoryAiAuditRepository
 from advisory.ingestion import JobDescriptionError
 from advisory.web import app
 
@@ -196,9 +197,53 @@ def test_member_and_free_ai_pools_have_hard_limits() -> None:
 def test_admin_page_and_development_session() -> None:
     page = client.get("/admin")
     assert page.status_code == 200
-    assert "Control who gets in" in page.text
+    assert "Know what the app is doing" in page.text
+    assert "Recent AI reviews" in page.text
     session = client.get("/api/session").json()
     assert session == {"email": "carlosan.1708@gmail.com", "access": "approved", "role": "admin"}
+
+
+def test_admin_usage_is_private_and_exposes_only_operational_review_metadata(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    audits = InMemoryAiAuditRepository()
+    audits.record(
+        AiAuditEvent.new(
+            owner_id="anonymous-free-tier",
+            access_tier="anonymous",
+            review_type="job_match",
+            status="gemini",
+            model="gemini-2.5-flash",
+            advisor_ids=["recruiter", "hiring_manager", "technical"],
+            score=71,
+            input_tokens=200,
+            output_tokens=80,
+            actual_micro_usd=260,
+            duration_ms=420,
+        )
+    )
+    monkeypatch.setattr(web, "ai_audit_repository", audits)
+
+    response = client.get("/api/admin/usage")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["project"]["limit_micro_usd"] == 50_000_000
+    assert payload["free"]["limit_micro_usd"] == 5_000_000
+    assert payload["recent_reviews"][0]["owner_label"] == "Anonymous free review"
+    assert payload["recent_reviews"][0]["score"] == 71
+    assert "owner_id" not in payload["recent_reviews"][0]
+    serialized = response.text.casefold()
+    assert "cv_text" not in serialized
+    assert "job_text" not in serialized
+    assert "generated prose are not stored" in serialized
+
+
+def test_non_admin_cannot_read_ai_usage() -> None:
+    response = client.get(
+        "/api/admin/usage",
+        headers={"x-advisory-user": "alice", "x-advisory-email": "alice@example.com"},
+    )
+    assert response.status_code == 403
 
 
 def test_login_creates_http_only_navigation_session_and_logout_clears_it() -> None:
@@ -292,10 +337,12 @@ def test_workspace_starts_four_stage_advisory_board_review() -> None:
     assert "Report" in response.text
     assert "Assemble your advisory board" in response.text
     assert "Panel composition" in response.text
-    assert "No specialists selected yet" in response.text
+    assert "Technical Recruiter" in response.text
+    assert "Hiring Manager" in response.text
+    assert "Technical Reviewer" in response.text
     assert "Technical Recruiter" in response.text
     assert 'data-advisor-preset="recruiter,hiring_manager,technical"' in response.text
-    assert "data-advisor-option checked" not in response.text
+    assert response.text.count("data-advisor-option checked") == 3
     assert 'src="/static/app.js?v=11"' in response.text
     assert 'enctype="multipart/form-data"' in response.text
 
@@ -332,7 +379,7 @@ def test_demo_renders_complete_board_finding() -> None:
     assert response.text.count('data-testid="score"') == 1
     assert "Safe, high-impact edits" in response.text
     assert "Questions to prepare" in response.text
-    assert "Requirement by requirement" in response.text
+    assert "Priority requirement evidence" in response.text
     assert "commercial ATS" in response.text
     assert 'data-testid="download-json-button"' in response.text
 
@@ -515,14 +562,14 @@ def test_user_evidence_is_html_escaped() -> None:
     response = client.post(
         "/analyze",
         data={
-            "cv_text": "EXPERIENCE\n<script>alert(1)</script>",
-            "job_text": "script",
+            "cv_text": "EXPERIENCE\nPython <script>alert(1)</script>",
+            "job_text": "Python",
             "advisor_ids": "recruiter,hiring_manager,technical",
         },
     )
     assert response.status_code == 200
     assert "<script>alert(1)</script>" not in response.text
-    assert "&lt;script&gt;alert(1)&lt;/script&gt;" in response.text
+    assert "Python &lt;script&gt;alert(1)&lt;/script&gt;" in response.text
 
 
 def test_api_contract() -> None:

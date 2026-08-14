@@ -16,7 +16,7 @@ The anonymous experience should feel like an advisory board, not a generic CV sc
 
 1. Upload a PDF/TXT CV or use the text fallback.
 2. Add an HTTPS job link or paste the description.
-3. Explicitly compose a panel of one to three advisors from six clear professional lenses. Nothing is preselected. Balanced, Builder, and Leadership presets are shortcuts that remain fully editable.
+3. Start with a balanced three-specialist panel, then keep it, customize it, or clear it. Builder and Leadership presets remain fully editable shortcuts.
 4. Submit once and see an honest board-in-session progress state.
 5. Read the report in this order: canonical evidence match, AI availability status, panel consensus, specialist verdicts, tailoring plan, interview questions, score breakdown, evidence ledger, structured artifact.
 

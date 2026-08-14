@@ -5,11 +5,11 @@
 - CV bytes, extracted text, contact information, and filenames.
 - Job URLs, descriptions, and the candidate's job-search intentions.
 - Integrity of findings and recommendations.
-- Provider credentials in future model-backed phases.
+- Google identity, Firestore records, private Cloud Storage objects, and Vertex AI usage.
 
 ## Trust boundaries
 
-Browser input, uploaded documents, remote job pages, redirects, and future model output are untrusted.
+Browser input, uploaded documents, remote job pages, redirects, and model output are untrusted.
 Application logs and downloadable artifacts are separate disclosure surfaces.
 
 ## Current controls
@@ -19,7 +19,8 @@ Application logs and downloadable artifacts are separate disclosure surfaces.
 - PDF and UTF-8 TXT are the only accepted formats.
 - Reads stop after 5 MiB; extracted text stops at 30,000 characters; PDFs stop at 40 pages.
 - Invalid, encrypted, unreadable, image-only, and unsupported documents fail with recovery guidance.
-- Files are parsed in memory and are not persisted.
+- Anonymous review files are parsed in memory and are not persisted. An approved user can explicitly add a
+  CV version to their private library; those bytes are stored in a user-scoped Cloud Storage path.
 
 ### Job-page ingestion
 
@@ -38,7 +39,22 @@ Application logs and downloadable artifacts are separate disclosure surfaces.
 - The deterministic scorer has typed, versioned output and never creates candidate claims.
 - Logs exclude CV text, job text, filenames, and full URLs. They contain only source, sizes, error types,
   timing, versions, aggregate counts, and opaque run IDs.
-- No persistence or user-built authentication exists in this private single-user phase.
+- The AI audit trail persists operational metadata only: tier, review type, status, model, selected advisor
+  IDs, score/band, token counts, cost, and timing. It never stores CV text, job text, or generated prose.
+
+### Identity and authorization
+
+- Google identity is verified server-side. Every private career record is scoped by the verified subject.
+- Workspace access is explicit and administrator-controlled; admin APIs require the configured admin role.
+- Browser mutations reject cross-site requests and private API responses are marked `no-store`.
+
+### AI spend and abuse controls
+
+- Atomic reservations enforce per-tier monthly hard caps before a model call: USD 5 shared anonymous,
+  USD 10 per approved identity, and a USD 50 project emergency ceiling.
+- Anonymous and approved AI requests have separate burst limits. Security denials, repeated uploads, and
+  AI bursts emit structured events for alerting.
+- The admin control center reports cap usage and privacy-safe AI review history without exposing source data.
 
 ## Abuse and availability risks
 
@@ -51,8 +67,6 @@ Application logs and downloadable artifacts are separate disclosure surfaces.
 
 ## Deferred controls
 
-- Before live LLM use: explicit data delimiters, typed outputs, evidence citations, claim validation, bounded
-  retries, provider privacy review, and adversarial prompt-injection evaluations.
-- Before persistence or multi-user access: identity-derived ownership, authorization tests, encryption,
-  retention/deletion policy, and audit events.
-- Before broad public launch: rate limiting, abuse monitoring, malware scanning, and a formal egress policy.
+- PDF parsing is bounded but not process-isolated; sandboxing and malware scanning remain future hardening.
+- A formal least-privilege IAM audit and documented audit-metadata retention policy remain outstanding.
+- Broad public launch would require stronger bot controls and a formal egress allow/deny policy.

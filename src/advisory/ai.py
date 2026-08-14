@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from time import monotonic
 from typing import Protocol
 
@@ -116,6 +117,27 @@ class CvReview(BaseModel):
     strengths: list[str] = Field(max_length=5)
     improvement_areas: list[str] = Field(max_length=5)
     next_actions: list[str] = Field(max_length=5)
+
+
+@dataclass(frozen=True)
+class AiUsage:
+    model: str
+    input_tokens: int
+    output_tokens: int
+    actual_micro_usd: int
+    duration_ms: int
+
+
+@dataclass(frozen=True)
+class MeteredEvidenceReview:
+    review: EvidenceReview
+    usage: AiUsage
+
+
+@dataclass(frozen=True)
+class MeteredCvReview:
+    review: CvReview
+    usage: AiUsage
 
 
 class AiReviewer(Protocol):
@@ -350,6 +372,15 @@ class BudgetedAiService:
         job_text: str,
         advisor_ids: list[str] | None = None,
     ) -> EvidenceReview:
+        return self.review_with_usage(owner_id, cv_text, job_text, advisor_ids).review
+
+    def review_with_usage(
+        self,
+        owner_id: str,
+        cv_text: str,
+        job_text: str,
+        advisor_ids: list[str] | None = None,
+    ) -> MeteredEvidenceReview:
         reservation = self.ledger.reserve(owner_id, self.maximum_cost)
         emergency_reservation = None
         if self.emergency_ledger is not None:
@@ -372,6 +403,7 @@ class BudgetedAiService:
             self.ledger.reconcile(reservation, actual_cost)
             if self.emergency_ledger is not None and emergency_reservation is not None:
                 self.emergency_ledger.reconcile(emergency_reservation, actual_cost)
+            duration_ms = round((monotonic() - started) * 1_000)
             emit(
                 "gemini.request.completed",
                 user_id=owner_id,
@@ -379,9 +411,18 @@ class BudgetedAiService:
                 input_tokens=input_tokens,
                 output_tokens=output_tokens,
                 actual_micro_usd=actual_cost,
-                duration_ms=round((monotonic() - started) * 1_000),
+                duration_ms=duration_ms,
             )
-            return review
+            return MeteredEvidenceReview(
+                review=review,
+                usage=AiUsage(
+                    model=self.pricing.model,
+                    input_tokens=input_tokens,
+                    output_tokens=output_tokens,
+                    actual_micro_usd=actual_cost,
+                    duration_ms=duration_ms,
+                ),
+            )
         except Exception:
             try:
                 self.ledger.release(reservation)
@@ -416,6 +457,9 @@ class BudgetedCvService:
         self.emergency_owner_id = emergency_owner_id
 
     def review(self, owner_id: str, cv_text: str) -> CvReview:
+        return self.review_with_usage(owner_id, cv_text).review
+
+    def review_with_usage(self, owner_id: str, cv_text: str) -> MeteredCvReview:
         reservation = self.ledger.reserve(owner_id, self.maximum_cost)
         emergency_reservation = None
         if self.emergency_ledger is not None:
@@ -433,6 +477,7 @@ class BudgetedCvService:
             self.ledger.reconcile(reservation, actual_cost)
             if self.emergency_ledger is not None and emergency_reservation is not None:
                 self.emergency_ledger.reconcile(emergency_reservation, actual_cost)
+            duration_ms = round((monotonic() - started) * 1_000)
             emit(
                 "gemini.cv_review.completed",
                 user_id=owner_id,
@@ -441,9 +486,18 @@ class BudgetedCvService:
                 input_tokens=input_tokens,
                 output_tokens=output_tokens,
                 actual_micro_usd=actual_cost,
-                duration_ms=round((monotonic() - started) * 1_000),
+                duration_ms=duration_ms,
             )
-            return review
+            return MeteredCvReview(
+                review=review,
+                usage=AiUsage(
+                    model=self.pricing.model,
+                    input_tokens=input_tokens,
+                    output_tokens=output_tokens,
+                    actual_micro_usd=actual_cost,
+                    duration_ms=duration_ms,
+                ),
+            )
         except Exception:
             try:
                 self.ledger.release(reservation)

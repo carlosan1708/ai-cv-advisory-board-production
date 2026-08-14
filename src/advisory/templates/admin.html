@@ -1,19 +1,64 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Workspace access | AI CV Advisory Board</title>
-  <link rel="stylesheet" href="/static/app.css?v=8"><link rel="stylesheet" href="/static/admin.css?v=1">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Admin control center | AI CV Advisory Board</title>
+  <link rel="stylesheet" href="/static/app.css?v=8">
+  <link rel="stylesheet" href="/static/admin.css?v=3">
   {% if auth_mode == "google" %}<script src="https://accounts.google.com/gsi/client" async defer></script>{% endif %}
 </head>
 <body class="admin-page" data-auth-mode="{{ auth_mode }}" data-client-id="{{ google_oauth_client_id }}">
-  <div class="admin-auth" data-admin-auth {% if auth_mode != "google" %}hidden{% endif %}><div><span class="overline">Administrator</span><h1>Sign in to manage access.</h1><p>Only the configured workspace administrator can approve members.</p><div data-google-signin></div><small data-auth-error></small></div></div>
-  <header class="app-header shell"><a class="brand" href="/dashboard"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span><span class="brand-copy"><strong>AI CV</strong><small>Access control</small></span></a><nav class="admin-nav"><a href="/dashboard">Dashboard</a><a href="/cvs">CV Library</a><a class="active" href="/admin">Access</a></nav></header>
+  <div class="admin-auth" data-admin-auth {% if auth_mode != "google" %}hidden{% endif %}>
+    <div><span class="overline">Administrator</span><h1>Sign in to manage the workspace.</h1><p>Usage, AI audit metadata, and access controls are available only to the configured administrator.</p><div data-google-signin></div><small data-auth-error></small></div>
+  </div>
+  <header class="app-header shell">
+    <a class="brand" href="/dashboard"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span><span class="brand-copy"><strong>AI CV</strong><small>Admin control center</small></span></a>
+    <nav class="admin-nav"><a href="/dashboard">Dashboard</a><a href="/cvs">CV Library</a><a class="active" href="/admin">Admin</a></nav>
+  </header>
   <main class="admin-shell shell" data-admin-content>
-    <section class="admin-heading"><div><span class="overline">Private workspace</span><h1>Control who gets in.</h1><p>Pre-approve an email, or decide requests after someone signs in. Each approved member has a $10 monthly AI allowance.</p></div></section>
-    <section class="invite-panel"><div><h2>Approve an email</h2><p>The user can enter immediately after signing in with this Google account.</p></div><form data-invite-form><input type="email" name="email" required placeholder="person@example.com" aria-label="Email to approve"><button class="button button-primary" type="submit">Approve user</button></form><small data-invite-error></small></section>
-    <section class="access-list-section"><div class="list-heading"><div><span class="overline">Members and requests</span><h2>Workspace access</h2></div><button class="text-action as-button" type="button" data-refresh>Refresh</button></div><div class="access-list" data-access-list></div><div class="admin-empty" data-admin-empty hidden>No access requests yet. You can pre-approve an email above.</div></section>
+    <section class="admin-heading">
+      <div><span class="overline">Private operations</span><h1>Know what the app is doing.</h1><p>Monitor AI spend and reliability, inspect privacy-safe review history, and control who can enter the private workspace.</p></div>
+      <button class="text-action as-button" type="button" data-refresh>Refresh data</button>
+    </section>
+
+    <section class="admin-metrics" aria-label="AI operations summary">
+      <article><span>Project AI spend</span><strong data-project-spend>—</strong><small data-project-period>Current month</small></article>
+      <article><span>Free review pool</span><strong data-free-spend>—</strong><small data-free-remaining>— remaining</small></article>
+      <article><span>Approved-member spend</span><strong data-member-spend>—</strong><small data-member-count>— active identities</small></article>
+      <article><span>Reviews this month</span><strong data-review-count>—</strong><small data-model-name>Loading model</small></article>
+    </section>
+
+    <section class="operations-grid">
+      <article class="usage-panel">
+        <div class="list-heading"><div><span class="overline">Hard-cap health</span><h2>AI allowance</h2></div><span class="health-dot">Live</span></div>
+        <div class="usage-meter"><div><span>Project ceiling</span><strong data-project-caption>—</strong></div><progress data-project-progress max="100" value="0">0%</progress></div>
+        <div class="usage-meter"><div><span>Anonymous free pool</span><strong data-free-caption>—</strong></div><progress data-free-progress max="100" value="0">0%</progress></div>
+        <div class="privacy-note"><span aria-hidden="true">✓</span><p data-privacy-note>Operational metadata only. CV text, job text, and generated prose are not stored.</p></div>
+      </article>
+      <article class="member-usage-panel">
+        <div class="list-heading"><div><span class="overline">Approved identities</span><h2>Member usage</h2></div></div>
+        <div class="member-usage-list" data-member-usage></div>
+        <div class="admin-empty" data-member-empty hidden>No approved identity has used AI yet.</div>
+      </article>
+    </section>
+
+    <section class="recent-section">
+      <div class="list-heading"><div><span class="overline">Privacy-safe audit trail</span><h2>Recent AI reviews</h2><p>Result metadata, cost, model status, and timing—never source documents.</p></div></div>
+      <div class="review-list" data-review-list></div>
+      <div class="admin-empty" data-review-empty hidden>No AI reviews have been recorded yet.</div>
+    </section>
+
+    <section class="access-section">
+      <div class="list-heading"><div><span class="overline">Workspace security</span><h2>Access control</h2><p>Pre-approve an email, or decide requests after Google sign-in.</p></div></div>
+      <div class="invite-panel"><div><h3>Approve an email</h3><p>The user can enter after signing in with this exact Google account.</p></div><form data-invite-form><input type="email" name="email" required placeholder="person@example.com" aria-label="Email to approve"><button class="button button-primary" type="submit">Approve user</button></form><small data-invite-error></small></div>
+      <div class="access-list" data-access-list></div>
+      <div class="admin-empty" data-admin-empty hidden>No access requests yet. You can pre-approve an email above.</div>
+    </section>
   </main>
   <template id="access-row"><article class="access-row"><div><strong data-email></strong><small data-subject></small></div><span class="access-status" data-status></span><div class="access-actions"><button type="button" data-approve>Approve</button><button type="button" data-reject>Reject</button></div></article></template>
-  <script src="/static/admin.js?v=2" defer></script>
-</body></html>
+  <template id="member-usage-row"><article class="member-usage-row"><div><strong data-member-email></strong><small data-member-caption></small></div><span data-member-total></span></article></template>
+  <template id="review-row"><article class="review-row"><div class="review-status" data-review-status></div><div class="review-main"><strong data-review-title></strong><small data-review-detail></small></div><div class="review-score"><strong data-review-score></strong><small data-review-band></small></div><div class="review-cost"><strong data-review-cost></strong><small data-review-tokens></small></div><time data-review-time></time></article></template>
+  <script src="/static/admin.js?v=3" defer></script>
+</body>
+</html>
