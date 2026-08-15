@@ -14,6 +14,30 @@ The application dashboard now leads with a plain-language AI Expert Panel, while
 
 Browser-facing security is enforced at the HTTP boundary with same-origin write checks, hardened session cookies, private-response cache controls, CSP, HSTS, and related response protections. See [Spec 011](docs/specs/011-browser-security-guardrails.md).
 
+## Product demo
+
+These walkthroughs are captured from the real application with synthetic career data. They use the deterministic local reviewers, so they expose no personal CV and consume no paid AI allowance.
+
+### Free advisory-board review
+
+Upload a CV, compare it with a role, read the evidence match, and move through the selected specialist panel, safe tailoring actions, interview preparation, and the requirement ledger.
+
+[![Animated walkthrough of the free CV-to-job advisory-board review](docs/assets/demo/free-advisory-review.gif)](https://ai-cv-advisory-board-production-142795288331.us-central1.run.app/workspace)
+
+### Application tracker and AI expert panel
+
+Track applications through the funnel, focus on a pipeline stage, preserve the CV version used for each role, and ask the three-lens expert panel for a second opinion.
+
+[![Animated walkthrough of the application tracker and AI expert panel](docs/assets/demo/application-tracker.gif)](https://ai-cv-advisory-board-production-142795288331.us-central1.run.app/dashboard)
+
+### CV library and immutable revisions
+
+Review a CV independently, inspect its strengths and gaps, edit the extracted content, and save the result as a new version without overwriting the original.
+
+[![Animated walkthrough of standalone CV review and immutable versioning](docs/assets/demo/cv-library-review.gif)](https://ai-cv-advisory-board-production-142795288331.us-central1.run.app/cvs)
+
+The capture contract and privacy constraints are documented in [Spec 016](docs/specs/016-readme-product-demos.md).
+
 ## Current vertical slice
 
 - Track applications in an interactive Interested → Applied → Interviewing → Offer → Closed pipeline.
@@ -48,9 +72,13 @@ is presented as a simulation of a commercial ATS.
 9. [CV library and navigation specification](docs/specs/009-cv-library-and-navigation.md)
 10. [Expert panel and persistent session specification](docs/specs/010-expert-panel-and-session.md)
 11. [Browser security guardrails](docs/specs/011-browser-security-guardrails.md)
-12. [Threat model](docs/THREAT_MODEL.md)
-13. [Operations and observability](docs/OPERATIONS.md)
-14. [ADR 001: deterministic baseline first](docs/adr/001-deterministic-baseline.md)
+12. [AI cost and abuse guardrails](docs/specs/013-ai-cost-and-abuse-guardrails.md)
+13. [Workspace history](docs/specs/014-workspace-history.md)
+14. [Free advisory-board experience](docs/specs/015-free-advisory-board-experience.md)
+15. [README product demos](docs/specs/016-readme-product-demos.md)
+16. [Threat model](docs/THREAT_MODEL.md)
+17. [Operations and observability](docs/OPERATIONS.md)
+18. [ADR 001: deterministic baseline first](docs/adr/001-deterministic-baseline.md)
 
 ## Local setup
 
