@@ -4,6 +4,19 @@
 
 Show the product's real capabilities directly in the repository without requiring a visitor to sign in, spend AI allowance, or trust a static mockup.
 
+## Portfolio consistency
+
+The README follows the same case-study rhythm as
+[`carlosan1708/trip-itinerary-displayer`](https://github.com/carlosan1708/trip-itinerary-displayer):
+
+1. Animated product hero, title, concise value proposition, author statement, live demo, and stack badges.
+2. AI engineering highlights and a compact system flow before the general feature inventory.
+3. Primary product capabilities and additional GIF walkthroughs.
+4. Stack, local setup, quality gates, tests, architecture, security, deployment, and the engineering trail.
+
+Consistency applies to portfolio information hierarchy and evidence quality. It does not require the two
+products to share branding, implementation choices, access policy, repository visibility, or licensing.
+
 ## Capture scenarios
 
 1. **Free advisory-board review**
@@ -47,4 +60,8 @@ Show the product's real capabilities directly in the repository without requirin
 - The tracker includes multiple stages, a live state change, a focused view, and an expert-panel result.
 - The CV library includes standalone review, editing, and a visible new immutable version.
 - Every captured person, company, document, and action is synthetic.
+- The primary free-review GIF appears above the title as the repository hero; the tracker and CV-library GIFs
+  remain in a clearly labelled additional-demo section.
+- The README identifies the product value, live demo, author, AI engineering decisions, stack, test strategy,
+  architecture, security controls, deployment target, and spec trail in a consistent portfolio narrative.
 - Automated tests remain unchanged and green because documentation capture does not alter product behavior.
