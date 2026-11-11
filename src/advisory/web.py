@@ -55,7 +55,15 @@ from advisory.ai_audit import (
 )
 from advisory.auth import IdentityVerifier, UserIdentity
 from advisory.budget import BudgetExceededError, BudgetLedger, InMemoryBudgetLedger, Pricing
-from advisory.career import Application, ApplicationCreate, ApplicationUpdate, SavedBoardReview
+from advisory.career import (
+    MAX_ANSWER_NOTES,
+    AnswerNote,
+    AnswerNoteInput,
+    Application,
+    ApplicationCreate,
+    ApplicationUpdate,
+    SavedBoardReview,
+)
 from advisory.career_repository import (
     CareerRepository,
     EmptyWorkspaceError,
@@ -211,12 +219,13 @@ def job_document_parser() -> CvDocumentParser:
     )
 
 
-APPLICATION_LIST_EXCLUDE = {"job_description", "board_review"}
+APPLICATION_LIST_EXCLUDE = {"job_description", "board_review", "answer_notes"}
 
 
 def application_payload(item: Application) -> dict[str, object]:
     payload = item.model_dump(mode="json", exclude=APPLICATION_LIST_EXCLUDE)
     payload["has_board_review"] = item.board_review is not None
+    payload["answer_count"] = len(item.answer_notes)
     return payload
 
 
@@ -701,6 +710,93 @@ def delete_application(request: Request, application_id: str) -> Response:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     emit("application.deleted", user_id=owner, application_id=application_id)
     return Response(status_code=204)
+
+
+def _application_or_404(owner: str, application_id: str) -> Application:
+    try:
+        return career_repository.get_application(owner, application_id)
+    except NotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+def _save_answer_notes(owner: str, application_id: str, notes: list[AnswerNote]) -> Application:
+    return career_repository.update_application(owner, application_id, ApplicationUpdate(answer_notes=notes))
+
+
+@app.get("/api/applications/{application_id}/answers")
+def list_answer_notes(request: Request, application_id: str) -> list[dict[str, object]]:
+    application = _application_or_404(owner_id(request), application_id)
+    return [note.model_dump(mode="json") for note in application.answer_notes]
+
+
+@app.post("/api/applications/{application_id}/answers", status_code=201)
+def add_answer_note(request: Request, application_id: str, payload: AnswerNoteInput) -> dict[str, object]:
+    owner = owner_id(request)
+    application = _application_or_404(owner, application_id)
+    if len(application.answer_notes) >= MAX_ANSWER_NOTES:
+        raise HTTPException(
+            status_code=422, detail=f"An application can keep up to {MAX_ANSWER_NOTES} answers."
+        )
+    note = AnswerNote.new(payload)
+    _save_answer_notes(owner, application_id, [*application.answer_notes, note])
+    emit("application.answer_added", user_id=owner, application_id=application_id, source=note.source)
+    return note.model_dump(mode="json")
+
+
+@app.patch("/api/applications/{application_id}/answers/{note_id}")
+def update_answer_note(
+    request: Request, application_id: str, note_id: str, payload: AnswerNoteInput
+) -> dict[str, object]:
+    owner = owner_id(request)
+    application = _application_or_404(owner, application_id)
+    current = next((note for note in application.answer_notes if note.id == note_id), None)
+    if current is None:
+        raise HTTPException(status_code=404, detail="Answer not found")
+    updated = AnswerNote(
+        id=current.id, created_at=current.created_at, updated_at=datetime.now(UTC), **payload.model_dump()
+    )
+    _save_answer_notes(
+        owner, application_id, [updated if note.id == note_id else note for note in application.answer_notes]
+    )
+    return updated.model_dump(mode="json")
+
+
+@app.delete("/api/applications/{application_id}/answers/{note_id}", status_code=204)
+def delete_answer_note(request: Request, application_id: str, note_id: str) -> Response:
+    owner = owner_id(request)
+    application = _application_or_404(owner, application_id)
+    remaining = [note for note in application.answer_notes if note.id != note_id]
+    if len(remaining) == len(application.answer_notes):
+        raise HTTPException(status_code=404, detail="Answer not found")
+    _save_answer_notes(owner, application_id, remaining)
+    return Response(status_code=204)
+
+
+def _remember_interview_answers(owner: str, application_id: str, answers: list[InterviewAnswer]) -> None:
+    """Keep CV-interview answers on the application so the candidate can see what they said."""
+    application = career_repository.get_application(owner, application_id)
+    notes = list(application.answer_notes)
+    now = datetime.now(UTC)
+    for item in answers:
+        if not item.answer.strip():
+            continue
+        question = item.question.strip()[:300]
+        existing = next(
+            (
+                index
+                for index, note in enumerate(notes)
+                if note.source == "cv_interview" and note.question == question
+            ),
+            None,
+        )
+        if existing is not None:
+            notes[existing] = notes[existing].model_copy(
+                update={"answer": item.answer.strip(), "updated_at": now}
+            )
+        elif len(notes) < MAX_ANSWER_NOTES:
+            note_input = AnswerNoteInput(question=question, answer=item.answer, source="cv_interview")
+            notes.append(AnswerNote.new(note_input))
+    _save_answer_notes(owner, application_id, notes)
 
 
 @app.get("/api/workspace-archives")
@@ -1257,6 +1353,8 @@ async def cv_interview_draft(
         raise HTTPException(status_code=422, detail="Answer at least one question first.")
     cv_text = _cv_text(owner, cv_version_id)
     job_text = _interview_context(owner, payload.application_id)
+    if payload.application_id:
+        _remember_interview_answers(owner, payload.application_id, payload.answers)
     interviewer = cv_interviewer()
     result, notice = await _member_ai(
         owner,

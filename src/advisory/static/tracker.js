@@ -55,6 +55,10 @@
     reportLink.hidden = !application.has_board_review;
     reportLink.href = `/review?application=${encodeURIComponent(application.id)}`;
     reportLink.setAttribute("aria-label", `Open the saved report for ${application.role} at ${application.company}`);
+    const answersButton = card.querySelector(".card-answers-button");
+    answersButton.textContent = application.answer_count ? `Answers · ${application.answer_count}` : "Answers";
+    answersButton.setAttribute("aria-label", `Answers for ${application.role} at ${application.company}`);
+    answersButton.addEventListener("click", () => openAnswers(application).catch((error) => window.alert(error.message)));
     const removeButton = card.querySelector(".card-remove-button");
     removeButton.setAttribute("aria-label", `Remove ${application.role} at ${application.company}`);
     removeButton.addEventListener("click", () => removeApplication(application).catch((error) => window.alert(error.message)));
@@ -313,6 +317,95 @@
     return data;
   }
   document.querySelectorAll("[data-open-application]").forEach((button) => button.addEventListener("click", () => openApplicationDialog()));
+  const answersDialog = document.querySelector("[data-answers-dialog]");
+  const answerSourceLabels = { application_form: "Application form", recruiter: "Recruiter call", interview: "Interview", cv_interview: "CV interview", other: "Other" };
+  const answersState = { application: null, notes: [] };
+  function resetAnswerEditor() {
+    answersDialog.querySelector("[data-answer-id]").value = "";
+    answersDialog.querySelector("[data-answer-question]").value = "";
+    answersDialog.querySelector("[data-answer-text]").value = "";
+    answersDialog.querySelector("[data-answer-source]").value = "application_form";
+    answersDialog.querySelector("[data-answer-editor-title]").textContent = "Add an answer";
+    answersDialog.querySelector("[data-answer-cancel-edit]").hidden = true;
+    answersDialog.querySelector("[data-answers-error]").textContent = "";
+  }
+  function renderAnswers() {
+    const list = answersDialog.querySelector("[data-answers-list]"); list.replaceChildren();
+    const query = answersDialog.querySelector("[data-answers-search]").value.trim().toLowerCase();
+    const notes = answersState.notes.filter((note) => !query || `${note.question} ${note.answer}`.toLowerCase().includes(query));
+    answersDialog.querySelector("[data-answers-empty]").hidden = answersState.notes.length > 0;
+    notes.forEach((note) => {
+      const item = document.createElement("article"); item.className = "answer-item";
+      const head = document.createElement("div"); head.className = "answer-head";
+      const source = document.createElement("span"); source.className = "answer-source"; source.textContent = answerSourceLabels[note.source] || note.source;
+      const date = document.createElement("small"); date.textContent = new Date(note.updated_at).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+      head.append(source, date);
+      const question = document.createElement("strong"); question.textContent = note.question;
+      const answer = document.createElement("p"); answer.textContent = note.answer || "(no answer recorded)";
+      const actions = document.createElement("div"); actions.className = "answer-actions";
+      const copy = document.createElement("button"); copy.type = "button"; copy.className = "text-action"; copy.textContent = "Copy";
+      copy.addEventListener("click", async () => { try { await navigator.clipboard.writeText(note.answer); copy.textContent = "Copied"; setTimeout(() => { copy.textContent = "Copy"; }, 1500); } catch (_) { copy.textContent = "Copy failed"; } });
+      const edit = document.createElement("button"); edit.type = "button"; edit.className = "text-action"; edit.textContent = "Edit";
+      edit.addEventListener("click", () => {
+        answersDialog.querySelector("[data-answer-id]").value = note.id;
+        answersDialog.querySelector("[data-answer-question]").value = note.question;
+        answersDialog.querySelector("[data-answer-text]").value = note.answer;
+        answersDialog.querySelector("[data-answer-source]").value = note.source;
+        answersDialog.querySelector("[data-answer-editor-title]").textContent = "Edit answer";
+        answersDialog.querySelector("[data-answer-cancel-edit]").hidden = false;
+        answersDialog.querySelector("[data-answer-question]").focus();
+      });
+      const remove = document.createElement("button"); remove.type = "button"; remove.className = "text-action danger-text"; remove.textContent = "Delete";
+      remove.addEventListener("click", async () => {
+        if (!window.confirm("Delete this answer?")) return;
+        try {
+          await api(`/api/applications/${answersState.application.id}/answers/${note.id}`, { method: "DELETE" });
+          answersState.notes = answersState.notes.filter((item) => item.id !== note.id); syncAnswerCount(); renderAnswers();
+        } catch (error) { answersDialog.querySelector("[data-answers-error]").textContent = error.message; }
+      });
+      actions.append(copy, edit, remove);
+      item.append(head, question, answer, actions); list.append(item);
+    });
+  }
+  function syncAnswerCount() {
+    const application = state.applications.find((item) => item.id === answersState.application.id);
+    if (application) application.answer_count = answersState.notes.length;
+    render();
+  }
+  async function openAnswers(application) {
+    answersState.application = application;
+    answersDialog.querySelector("[data-answers-title]").textContent = `${application.role} at ${application.company}`;
+    answersDialog.querySelector("[data-answers-search]").value = "";
+    resetAnswerEditor();
+    answersState.notes = await api(`/api/applications/${application.id}/answers`);
+    renderAnswers();
+    answersDialog.showModal();
+  }
+  answersDialog.querySelector("[data-answers-search]").addEventListener("input", renderAnswers);
+  ["[data-answers-search]", "[data-answer-question]"].forEach((selector) => answersDialog.querySelector(selector).addEventListener("keydown", (event) => {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    if (selector === "[data-answer-question]") answersDialog.querySelector("[data-answer-save]").click();
+  }));
+  answersDialog.querySelector("[data-answer-cancel-edit]").addEventListener("click", resetAnswerEditor);
+  answersDialog.querySelector("[data-answer-save]").addEventListener("click", async (event) => {
+    const error = answersDialog.querySelector("[data-answers-error]"); error.textContent = "";
+    const id = answersDialog.querySelector("[data-answer-id]").value;
+    const payload = {
+      question: answersDialog.querySelector("[data-answer-question]").value.trim(),
+      answer: answersDialog.querySelector("[data-answer-text]").value.trim(),
+      source: answersDialog.querySelector("[data-answer-source]").value,
+    };
+    if (!payload.question) { error.textContent = "Add the question you were asked."; return; }
+    const button = event.currentTarget; button.disabled = true;
+    try {
+      const base = `/api/applications/${answersState.application.id}/answers`;
+      const note = await api(id ? `${base}/${id}` : base, { method: id ? "PATCH" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+      answersState.notes = id ? answersState.notes.map((item) => (item.id === id ? note : item)) : [...answersState.notes, note];
+      resetAnswerEditor(); syncAnswerCount(); renderAnswers();
+    } catch (exc) { error.textContent = exc.message; }
+    finally { button.disabled = false; }
+  });
   async function removeApplication(application) {
     if (!window.confirm(`Remove ${application.role} at ${application.company}? This cannot be undone. Your CV versions are kept.`)) return false;
     await api(`/api/applications/${application.id}`, { method: "DELETE" });

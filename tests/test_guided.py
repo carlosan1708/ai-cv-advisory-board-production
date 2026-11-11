@@ -257,3 +257,65 @@ def test_run_budgeted_reconciles_and_releases() -> None:
         )
     assert ledger.snapshot("u").reserved_micro_usd == 0
     assert emergency.snapshot("project-emergency-cap").reserved_micro_usd == 0
+
+
+def test_answer_notes_crud_is_owner_scoped() -> None:
+    headers, _, application = _setup("answers-a")
+    base = f"/api/applications/{application['id']}/answers"
+    assert client.get(base, headers=headers).json() == []
+    assert client.post(base, headers=headers, json={"question": "  ", "answer": "x"}).status_code == 422
+    created = client.post(
+        base,
+        headers=headers,
+        json={"question": "Salary expectations?", "answer": "  90k-100k EUR  ", "source": "recruiter"},
+    )
+    assert created.status_code == 201
+    note = created.json()
+    assert note["answer"] == "90k-100k EUR"
+    listed = client.get("/api/applications", headers=headers).json()[0]
+    assert listed["answer_count"] == 1
+    assert "answer_notes" not in listed
+
+    updated = client.patch(
+        f"{base}/{note['id']}",
+        headers=headers,
+        json={"question": "Salary expectations?", "answer": "95k EUR", "source": "recruiter"},
+    ).json()
+    assert updated["answer"] == "95k EUR"
+    assert updated["created_at"] == note["created_at"]
+
+    other = {"x-advisory-user": "answers-intruder"}
+    assert client.get(base, headers=other).status_code == 404
+    assert client.delete(f"{base}/{note['id']}", headers=other).status_code == 404
+    assert client.patch(f"{base}/missing", headers=headers, json={"question": "Q"}).status_code == 404
+    assert client.delete(f"{base}/{note['id']}", headers=headers).status_code == 204
+    assert client.delete(f"{base}/{note['id']}", headers=headers).status_code == 404
+    assert client.get(base, headers=headers).json() == []
+
+
+def test_answer_notes_are_capped(monkeypatch: pytest.MonkeyPatch) -> None:
+    headers, _, application = _setup("answers-b")
+    monkeypatch.setattr(web, "MAX_ANSWER_NOTES", 2)
+    base = f"/api/applications/{application['id']}/answers"
+    for index in range(2):
+        assert client.post(base, headers=headers, json={"question": f"Q{index}"}).status_code == 201
+    assert client.post(base, headers=headers, json={"question": "Q3"}).status_code == 422
+
+
+def test_cv_interview_answers_are_saved_on_the_application() -> None:
+    headers, version, application = _setup("answers-c", job_text="Python Kubernetes")
+    draft_url = f"/api/cv-versions/{version['id']}/interview/draft"
+    body = {
+        "application_id": application["id"],
+        "answers": [
+            {"question": "Have you used Kubernetes?", "answer": "Yes, GKE for 2 years."},
+            {"question": "Skipped question", "answer": ""},
+        ],
+    }
+    assert client.post(draft_url, headers=headers, json=body).status_code == 200
+    body["answers"][0]["answer"] = "Yes, GKE for 3 years."
+    assert client.post(draft_url, headers=headers, json=body).status_code == 200
+    notes = client.get(f"/api/applications/{application['id']}/answers", headers=headers).json()
+    assert [(note["question"], note["answer"], note["source"]) for note in notes] == [
+        ("Have you used Kubernetes?", "Yes, GKE for 3 years.", "cv_interview")
+    ]

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, date, datetime
 from enum import StrEnum
-from typing import Any
+from typing import Any, Literal
 from urllib.parse import urlparse
 from uuid import uuid4
 
@@ -55,6 +55,42 @@ class ApplicationCreate(BaseModel):
         return value.strip()
 
 
+AnswerSource = Literal["application_form", "recruiter", "interview", "cv_interview", "other"]
+MAX_ANSWER_NOTES = 100
+
+
+class AnswerNoteInput(BaseModel):
+    question: str = Field(min_length=1, max_length=300)
+    answer: str = Field(default="", max_length=5_000)
+    source: AnswerSource = "application_form"
+
+    @field_validator("question")
+    @classmethod
+    def question_not_blank(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("must not be blank")
+        return cleaned
+
+    @field_validator("answer")
+    @classmethod
+    def strip_answer(cls, value: str) -> str:
+        return value.strip()
+
+
+class AnswerNote(AnswerNoteInput):
+    """An answer the candidate gave for this application (form, recruiter, interview)."""
+
+    id: str
+    created_at: datetime
+    updated_at: datetime
+
+    @classmethod
+    def new(cls, payload: AnswerNoteInput) -> AnswerNote:
+        now = datetime.now(UTC)
+        return cls(id=uuid4().hex, created_at=now, updated_at=now, **payload.model_dump())
+
+
 class SavedBoardReview(BaseModel):
     """The latest guided board review for an application, kept so it can be reopened."""
 
@@ -82,6 +118,7 @@ class ApplicationUpdate(BaseModel):
     notes: str | None = Field(default=None, max_length=10_000)
     fit_score: int | None = Field(default=None, ge=0, le=100)
     ai_summary: str | None = Field(default=None, max_length=700)
+    answer_notes: list[AnswerNote] | None = Field(default=None, max_length=MAX_ANSWER_NOTES)
     job_description: str | None = Field(default=None, max_length=30_000)
     job_description_filename: str | None = Field(default=None, max_length=200)
     board_review: SavedBoardReview | None = None
@@ -115,6 +152,7 @@ class Application(ApplicationCreate):
     job_description: str = Field(default="", max_length=30_000)
     job_description_filename: str = Field(default="", max_length=200)
     board_review: SavedBoardReview | None = None
+    answer_notes: list[AnswerNote] = Field(default_factory=list, max_length=MAX_ANSWER_NOTES)
     archive_id: str | None = None
     created_at: datetime
     updated_at: datetime

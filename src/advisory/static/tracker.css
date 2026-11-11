@@ -75,3 +75,22 @@
 
 .expert-panel-actions { display: flex; flex-wrap: wrap; gap: 10px; }
 .card-report-link { padding: 6px 2px; font-size: 0.8rem; font-weight: 700; }
+
+.answers-dialog { width: min(760px, calc(100% - 24px)); }
+.answers-search { width: 100%; margin: 4px 0 12px; padding: 9px 12px; border: 1px solid var(--line-strong); border-radius: 10px; font: inherit; font-size: .82rem; }
+.answers-list { display: grid; gap: 10px; max-height: 46vh; overflow-y: auto; }
+.answer-item { padding: 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); display: grid; gap: 6px; }
+.answer-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.answer-head small { color: var(--faint); font-size: .68rem; }
+.answer-source { padding: 3px 8px; border-radius: 99px; background: var(--brand-soft); color: var(--brand-dark); font-size: .65rem; font-weight: 700; }
+.answer-item strong { font-size: .84rem; line-height: 1.4; }
+.answer-item p { margin: 0; color: var(--ink-soft); font-size: .8rem; line-height: 1.55; white-space: pre-wrap; }
+.answer-actions { display: flex; gap: 12px; }
+.answer-actions .text-action { padding: 2px 0; font-size: .75rem; }
+.danger-text { color: #b42318; }
+.answers-empty { color: var(--muted); font-size: .8rem; }
+.answer-editor { margin: 16px 0 0; padding: 16px 0 0; border: 0; border-top: 1px solid var(--line); display: grid; gap: 12px; }
+.answer-editor legend { padding: 0; font-weight: 800; font-size: .9rem; }
+.answer-editor label { display: grid; gap: 6px; font-size: .78rem; font-weight: 700; }
+.answer-editor textarea { width: 100%; padding: 10px 12px; border: 1px solid var(--line-strong); border-radius: 10px; font: inherit; font-size: .82rem; resize: vertical; }
+.card-answers-button { padding: 6px 2px; font-size: .8rem; }

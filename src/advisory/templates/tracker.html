@@ -6,7 +6,7 @@
   <title>Application pipeline · AI CV Advisory Board</title>
   <meta name="description" content="Track every application, next action, and the exact CV version you sent.">
   <link rel="stylesheet" href="/static/app.css?v=12">
-  <link rel="stylesheet" href="/static/tracker.css?v=11">
+  <link rel="stylesheet" href="/static/tracker.css?v=12">
   {% if auth_mode == "google" %}<script src="https://accounts.google.com/gsi/client" async defer></script>{% endif %}
 </head>
 <body class="tracker-page">
@@ -220,6 +220,33 @@
     </form>
   </dialog>
 
+  <dialog class="tracker-dialog answers-dialog" data-answers-dialog>
+    <form method="dialog" data-answers-form>
+      <div class="dialog-heading"><div><span class="overline">Answers I've given</span><h2 data-answers-title>Answers</h2></div><button class="icon-button" value="cancel" aria-label="Close">&times;</button></div>
+      <p class="dialog-lede">Keep what you answered on forms, to recruiters, and in interviews, so you stay consistent and can reuse good answers.</p>
+      <input type="search" class="answers-search" placeholder="Search questions and answers" aria-label="Search answers" data-answers-search>
+      <div class="answers-list" data-answers-list></div>
+      <p class="answers-empty" data-answers-empty hidden>No answers saved yet. Add the first one below.</p>
+      <fieldset class="answer-editor">
+        <legend data-answer-editor-title>Add an answer</legend>
+        <input type="hidden" data-answer-id>
+        <div class="field-grid two-columns">
+          <label>Where <select data-answer-source>
+            <option value="application_form">Application form</option>
+            <option value="recruiter">Recruiter call</option>
+            <option value="interview">Interview</option>
+            <option value="cv_interview">CV interview</option>
+            <option value="other">Other</option>
+          </select></label>
+          <label>Question <input maxlength="300" placeholder="e.g. What are your salary expectations?" data-answer-question data-testid="answer-question"></label>
+        </div>
+        <label>My answer <textarea rows="5" maxlength="5000" placeholder="What you said or wrote" data-answer-text data-testid="answer-text"></textarea></label>
+        <p class="form-error" data-answers-error role="alert"></p>
+        <div class="dialog-actions"><button class="button button-secondary" type="button" data-answer-cancel-edit hidden>Cancel edit</button><button class="button button-secondary" value="cancel">Close</button><button class="button button-primary" type="button" data-answer-save data-testid="answer-save">Save answer</button></div>
+      </fieldset>
+    </form>
+  </dialog>
+
   <template id="application-card-template">
     <article class="application-card" draggable="true">
       <div class="card-top"><span class="company-mark" aria-hidden="true"></span><span class="card-date"></span></div>
@@ -231,9 +258,9 @@
       <button class="ai-review-button" type="button" hidden>Review attached CV</button>
       <button class="application-review-button ai-review-button" type="button" hidden>Review attached CV</button>
       <p class="ai-summary"></p>
-      <div class="card-footer"><label class="status-control">Move to<select></select></label><span class="card-actions"><a class="text-action card-report-link" hidden>Open report</a><button class="text-action card-edit-button" type="button">Edit</button><button class="text-action card-remove-button" type="button">Remove</button></span></div>
+      <div class="card-footer"><label class="status-control">Move to<select></select></label><span class="card-actions"><a class="text-action card-report-link" hidden>Open report</a><button class="text-action card-answers-button" type="button">Answers</button><button class="text-action card-edit-button" type="button">Edit</button><button class="text-action card-remove-button" type="button">Remove</button></span></div>
     </article>
   </template>
-  <script src="/static/tracker.js?v=11" defer></script>
+  <script src="/static/tracker.js?v=12" defer></script>
 </body>
 </html>
