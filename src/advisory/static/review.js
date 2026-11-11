@@ -1,6 +1,6 @@
 (() => {
   const advisors = Object.fromEntries(JSON.parse(document.getElementById("advisors-data").textContent).map((item) => [item.id, item]));
-  const state = { cvs: [], applications: [], cvId: "", application: null, jobText: "", saved: null, questions: [] };
+  const state = { cvs: [], applications: [], cvId: "", mode: "new" };
   let authToken = "";
   const $ = (selector, root = document) => root.querySelector(selector);
   const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
@@ -20,14 +20,12 @@
   }
   const jsonBody = (data) => ({ headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) });
   const setError = (step, message) => { const node = $(`[data-step-error="${step}"]`); if (node) node.textContent = message || ""; };
+  const hostOf = (url) => { try { return new URL(url).hostname.replace(/^www\./, ""); } catch (_) { return url; } };
+  const hasSavedJob = (app) => Boolean(app && (app.job_url || app.job_description_filename));
 
   // ---------- Steps ----------
   function showStep(step) {
-    $$("[data-step]").forEach((panel) => {
-      const value = Number(panel.dataset.step);
-      if (value === 4) panel.hidden = step !== 4;
-      else panel.classList.toggle("visible", value === step);
-    });
+    $$("[data-step]").forEach((panel) => panel.classList.toggle("visible", Number(panel.dataset.step) === step));
     $("[data-review-progress]").hidden = true;
     $$("[data-step-indicator]").forEach((indicator) => {
       const value = Number(indicator.dataset.stepIndicator);
@@ -35,6 +33,7 @@
       indicator.classList.toggle("complete", value < step);
       if (value === step) indicator.setAttribute("aria-current", "step"); else indicator.removeAttribute("aria-current");
     });
+    if (step === 3) renderSummary();
     $(`[data-step="${step}"] h2`)?.focus({ preventScroll: true });
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
@@ -42,8 +41,117 @@
     const original = button.innerHTML; button.disabled = true; button.textContent = label;
     try { return await work(); } finally { button.disabled = false; button.innerHTML = original; }
   }
+  $$("[data-back]").forEach((button) => button.addEventListener("click", () => showStep(Number(button.dataset.back))));
 
-  // ---------- Step 1: CV ----------
+  // ---------- Step 1: Job ----------
+  const selectedApplication = () => (state.mode === "existing" ? state.applications.find((app) => app.id === $("[data-application-select]").value) : null);
+  let activeSource = "link";
+  let previewToken = 0;
+  const previewStatus = (text, tone = "") => { const node = $("[data-preview-status]"); node.textContent = text; node.dataset.tone = tone; };
+
+  function setSource(source) {
+    activeSource = source;
+    $$("[data-source-tab]").forEach((tab) => { const on = tab.dataset.sourceTab === source; tab.classList.toggle("active", on); tab.setAttribute("aria-selected", String(on)); });
+    $$("[data-source-panel]").forEach((panel) => { panel.hidden = panel.dataset.sourcePanel !== source; });
+    previewStatus("");
+  }
+  $$("[data-source-tab]").forEach((tab) => tab.addEventListener("click", () => setSource(tab.dataset.sourceTab)));
+  setSource("link");
+
+  function setMode(mode) {
+    state.mode = mode === "existing" && state.applications.length ? "existing" : "new";
+    $$("[data-job-mode]").forEach((input) => { input.checked = input.value === state.mode; input.closest("label").classList.toggle("selected", input.checked); });
+    $("[data-existing-picker]").hidden = state.mode !== "existing";
+    $("[data-new-fields]").hidden = state.mode === "existing";
+    updateTarget();
+  }
+  $$("[data-job-mode]").forEach((input) => input.addEventListener("change", () => { setMode(input.value); setError(1, ""); }));
+
+  function renderApplications(selectedId = "") {
+    const select = $("[data-application-select]");
+    select.replaceChildren(...state.applications.map((item) => new Option(`${item.role} — ${item.company}`, item.id)));
+    if (state.applications.some((item) => item.id === selectedId)) select.value = selectedId;
+    const existing = $('[data-job-mode][value="existing"]');
+    existing.disabled = state.applications.length === 0;
+    $("[data-existing-count]").textContent = state.applications.length
+      ? `${state.applications.length} in your pipeline`
+      : "None yet";
+  }
+  function updateTarget() {
+    const item = selectedApplication();
+    const parts = [];
+    if (item?.job_description_filename) parts.push(`File: ${item.job_description_filename}`);
+    if (item?.job_url) parts.push(`Link: ${hostOf(item.job_url)}`);
+    $('[data-source-tab="saved"]').hidden = parts.length === 0;
+    $("[data-job-saved]").textContent = parts.length ? `${parts.join(" · ")}. Nothing else needed — or pick another source to replace it.` : "";
+    $("[data-source-hint]").textContent = item && !parts.length ? "This application has no posting yet — add one" : "One is enough";
+    if (parts.length) setSource("saved"); else if (activeSource === "saved") setSource("link");
+  }
+  $("[data-application-select]").addEventListener("change", () => {
+    updateTarget();
+    const item = selectedApplication(); if (item?.cv_version_id) state.cvId = item.cv_version_id;
+  });
+
+  function fillIdentity(result) {
+    [["[data-new-company]", result.company], ["[data-new-role]", result.role]].forEach(([selector, value]) => {
+      const input = $(selector);
+      if (value && (!input.value.trim() || input.dataset.autofilled === "true")) { input.value = value; input.dataset.autofilled = "true"; }
+    });
+  }
+  $$("[data-new-company], [data-new-role]").forEach((input) => input.addEventListener("input", () => { input.dataset.autofilled = "false"; }));
+
+  function jobInput() {
+    return {
+      url: activeSource === "link" ? $("[data-job-url]").value.trim() : "",
+      file: activeSource === "file" ? $("[data-job-file]").files?.[0] || null : null,
+      text: activeSource === "text" ? $("[data-job-text]").value.trim() : "",
+    };
+  }
+  async function previewJob() {
+    if (state.mode !== "new") return null;
+    const body = new FormData(); const job = jobInput();
+    if (job.url) { try { if (new URL(job.url).protocol !== "https:") return null; } catch (_) { return null; } body.append("job_url", job.url); }
+    else if (job.file) body.append("job_file", job.file);
+    else if (job.text.length >= 40) body.append("job_text", job.text);
+    else return null;
+    const token = ++previewToken;
+    previewStatus("Reading the posting…");
+    try {
+      const result = await api("/api/job-preview", { method: "POST", body });
+      if (token !== previewToken) return null;
+      fillIdentity(result);
+      const found = [result.role, result.company].filter(Boolean).join(" at ");
+      previewStatus(found ? `Posting read: ${found}.` : "Posting read.", "ok");
+      return result;
+    } catch (error) {
+      if (token !== previewToken) return null;
+      previewStatus(error.message, "error");
+      return null;
+    }
+  }
+  let previewTimer = 0;
+  $("[data-job-url]").addEventListener("input", () => { clearTimeout(previewTimer); previewTimer = window.setTimeout(previewJob, 700); });
+  $("[data-job-file]").addEventListener("change", previewJob);
+  $("[data-job-text]").addEventListener("blur", previewJob);
+
+  $('[data-next="1"]').addEventListener("click", async (event) => {
+    setError(1, "");
+    const job = jobInput(); const item = selectedApplication();
+    if (state.mode === "existing" && !item) { setError(1, "Pick the application, or choose “A new posting”."); return; }
+    if (job.url) { try { if (new URL(job.url).protocol !== "https:") throw new Error(); } catch (_) { setError(1, "Enter a complete HTTPS job link, such as https://company.com/jobs/role."); return; } }
+    if (activeSource !== "saved" && !(job.url || job.file || job.text)) {
+      setError(1, activeSource === "link" ? "Add the job link, or choose PDF or Paste text." : activeSource === "file" ? "Choose the posting file." : "Paste the job description.");
+      return;
+    }
+    if (state.mode === "new" && !($("[data-new-company]").value.trim() && $("[data-new-role]").value.trim())) {
+      await withBusy(event.currentTarget, "Reading the posting…", previewJob);
+    }
+    if (item?.cv_version_id) state.cvId = item.cv_version_id;
+    renderCvOptions();
+    showStep(2);
+  });
+
+  // ---------- Step 2: CV ----------
   function renderCvOptions() {
     const list = $("[data-cv-options]"); list.replaceChildren();
     $("[data-cv-empty]").hidden = state.cvs.length > 0;
@@ -59,8 +167,8 @@
       list.append(label);
     });
   }
-  $('[data-next="1"]').addEventListener("click", async (event) => {
-    setError(1, "");
+  $('[data-next="2"]').addEventListener("click", async (event) => {
+    setError(2, "");
     const file = $("[data-cv-file]").files?.[0];
     try {
       if (file) {
@@ -74,146 +182,12 @@
           renderCvOptions();
         });
       }
-      if (!state.cvId) { setError(1, "Choose a CV from your library or upload one."); return; }
-      showStep(2);
-    } catch (error) { setError(1, error.message); }
-  });
-
-  // ---------- Step 2: Job ----------
-  const targetId = () => $("[data-application-select]").value;
-  const selectedApplication = () => state.applications.find((app) => app.id === targetId());
-  let activeSource = "link";
-  let previewToken = 0;
-  const previewStatus = (text, tone = "") => { const node = $("[data-preview-status]"); node.textContent = text; node.dataset.tone = tone; };
-
-  function setSource(source) {
-    activeSource = source;
-    $$("[data-source-tab]").forEach((tab) => { const on = tab.dataset.sourceTab === source; tab.classList.toggle("active", on); tab.setAttribute("aria-selected", String(on)); });
-    $$("[data-source-panel]").forEach((panel) => { panel.hidden = panel.dataset.sourcePanel !== source; });
-    previewStatus("");
-  }
-  $$("[data-source-tab]").forEach((tab) => tab.addEventListener("click", () => setSource(tab.dataset.sourceTab)));
-  setSource("link");
-
-  function renderApplications(selectedId = "") {
-    const select = $("[data-application-select]");
-    select.replaceChildren(new Option("New application from this posting", ""));
-    state.applications.forEach((item) => select.add(new Option(`${item.role} — ${item.company}`, item.id)));
-    select.value = state.applications.some((item) => item.id === selectedId) ? selectedId : "";
-    updateTarget();
-  }
-  function updateTarget() {
-    const item = selectedApplication();
-    $("[data-new-fields]").hidden = Boolean(item);
-    $("[data-save-to-hint]").textContent = item
-      ? `The report is saved on ${item.role} at ${item.company}.`
-      : "A new application is added to your pipeline with this report.";
-    const parts = [];
-    if (item?.job_description_filename) parts.push(`Job description: ${item.job_description_filename}`);
-    if (item?.job_url) parts.push(`Link: ${item.job_url}`);
-    $('[data-source-tab="saved"]').hidden = parts.length === 0;
-    $("[data-job-saved]").textContent = parts.length ? `${parts.join(" · ")}. Nothing else needed — or pick another source to replace it.` : "";
-    if (parts.length) setSource("saved"); else if (activeSource === "saved") setSource("link");
-  }
-  $("[data-application-select]").addEventListener("change", updateTarget);
-
-  function fillIdentity(result) {
-    [["[data-new-company]", result.company], ["[data-new-role]", result.role]].forEach(([selector, value]) => {
-      const input = $(selector);
-      if (value && (!input.value.trim() || input.dataset.autofilled === "true")) { input.value = value; input.dataset.autofilled = "true"; }
-    });
-  }
-  $$("[data-new-company], [data-new-role]").forEach((input) => input.addEventListener("input", () => { input.dataset.autofilled = "false"; }));
-
-  async function previewJob() {
-    const body = new FormData();
-    if (activeSource === "link") {
-      const url = $("[data-job-url]").value.trim();
-      try { if (new URL(url).protocol !== "https:") return null; } catch (_) { return null; }
-      body.append("job_url", url);
-    } else if (activeSource === "file") {
-      const file = $("[data-job-file]").files?.[0]; if (!file) return null;
-      body.append("job_file", file);
-    } else if (activeSource === "text") {
-      const text = $("[data-job-text]").value.trim(); if (text.length < 40) return null;
-      body.append("job_text", text);
-    } else return null;
-    const token = ++previewToken;
-    previewStatus("Reading the posting…");
-    try {
-      const result = await api("/api/job-preview", { method: "POST", body });
-      if (token !== previewToken) return null;
-      fillIdentity(result);
-      const found = [result.role, result.company].filter(Boolean).join(" at ");
-      previewStatus(found ? `Posting read: ${found}.` : "Posting read.", "ok");
-      return result;
-    } catch (error) {
-      if (token !== previewToken) return null;
-      previewStatus(error.message, "error");
-      return { failed: true, message: error.message };
-    }
-  }
-  let previewTimer = 0;
-  $("[data-job-url]").addEventListener("input", () => { clearTimeout(previewTimer); previewTimer = window.setTimeout(previewJob, 700); });
-  $("[data-job-file]").addEventListener("change", previewJob);
-  $("[data-job-text]").addEventListener("blur", previewJob);
-
-  async function resolveTarget() {
-    const id = targetId();
-    if (!id) return null;
-    let item = selectedApplication();
-    if (!item) {
-      // The list on this page may be out of date (e.g. edited in another tab): reload before giving up.
-      state.applications = await api("/api/applications");
-      item = selectedApplication();
-      if (!item) { renderApplications(""); throw new Error("That application no longer exists. A new one will be created instead — press continue again."); }
-    }
-    return item;
-  }
-
-  $('[data-next="2"]').addEventListener("click", async (event) => {
-    setError(2, "");
-    const jobUrl = activeSource === "link" ? $("[data-job-url]").value.trim() : "";
-    const jobFile = activeSource === "file" ? $("[data-job-file]").files?.[0] : null;
-    state.jobText = activeSource === "text" ? $("[data-job-text]").value.trim() : "";
-    if (jobUrl) { try { if (new URL(jobUrl).protocol !== "https:") throw new Error(); } catch (_) { setError(2, "Enter a complete HTTPS job link, such as https://company.com/jobs/role."); return; } }
-    if (activeSource !== "saved" && !(jobUrl || jobFile || state.jobText)) {
-      setError(2, activeSource === "link" ? "Add the job link, or choose PDF or Paste text." : activeSource === "file" ? "Choose the posting file." : "Paste the job description.");
-      return;
-    }
-    try {
-      await withBusy(event.currentTarget, "Saving…", async () => {
-        const target = await resolveTarget();
-        let application;
-        if (!target) {
-          let company = $("[data-new-company]").value.trim(); let role = $("[data-new-role]").value.trim();
-          if (!company || !role) { await previewJob(); company = $("[data-new-company]").value.trim(); role = $("[data-new-role]").value.trim(); }
-          application = await api("/api/applications", { method: "POST", ...jsonBody({
-            company: company || "Unknown company",
-            role: role || (jobFile ? jobFile.name.replace(/\.[^.]+$/, "") : "Untitled role"),
-            cv_version_id: state.cvId,
-            job_url: jobUrl,
-          }) });
-          state.applications.unshift(application);
-        } else {
-          application = await api(`/api/applications/${target.id}`, { method: "PATCH", ...jsonBody({ cv_version_id: state.cvId, ...(jobUrl ? { job_url: jobUrl } : {}) }) });
-        }
-        if (jobFile) {
-          const body = new FormData(); body.append("job_file", jobFile);
-          application = await api(`/api/applications/${application.id}/job-description`, { method: "POST", body });
-          $("[data-job-file]").value = "";
-        } else if (jobUrl && application.job_description_filename) {
-          application = await api(`/api/applications/${application.id}/job-description`, { method: "DELETE" });
-        }
-        state.application = application;
-        state.applications = state.applications.map((item) => (item.id === application.id ? application : item));
-        renderApplications(application.id);
-      });
+      if (!state.cvId) { setError(2, "Choose a CV from your library or upload one."); return; }
       showStep(3);
     } catch (error) { setError(2, error.message); }
   });
 
-  // ---------- Step 3: Board ----------
+  // ---------- Step 3: Review ----------
   const advisorInputs = $$("[data-advisor-option]");
   const selectedAdvisors = () => advisorInputs.filter((input) => input.checked).map((input) => input.value);
   function renderAdvisors() {
@@ -228,6 +202,7 @@
       const active = ids.length === selected.length && ids.every((id) => selected.includes(id));
       button.classList.toggle("active", active); button.setAttribute("aria-pressed", String(active));
     });
+    $("[data-run-board]").textContent = selected.length ? selected.map((id) => advisors[id]?.name || id).join(" · ") : "No specialists chosen";
     if (selected.length) setError(3, "");
   }
   advisorInputs.forEach((input) => input.addEventListener("change", renderAdvisors));
@@ -236,232 +211,87 @@
     advisorInputs.forEach((input) => { input.checked = ids.has(input.value); });
     renderAdvisors();
   }));
-  $$("[data-back]").forEach((button) => button.addEventListener("click", () => showStep(Number(button.dataset.back))));
+
+  function renderSummary() {
+    const item = selectedApplication(); const job = jobInput();
+    const company = $("[data-new-company]").value.trim(); const role = $("[data-new-role]").value.trim();
+    $("[data-run-job]").textContent = item ? `${item.role} at ${item.company}` : role || company ? [role || "New role", company].filter(Boolean).join(" at ") : "New application";
+    let source = "";
+    if (job.url) source = `Link · ${hostOf(job.url)}`;
+    else if (job.file) source = `File · ${job.file.name}`;
+    else if (job.text) source = `Pasted description · ${job.text.split(/\s+/).length} words`;
+    else if (item?.job_description_filename) source = `Saved file · ${item.job_description_filename}`;
+    else if (item?.job_url) source = `Saved link · ${hostOf(item.job_url)}`;
+    $("[data-run-job-source]").textContent = item ? source : `${source} · added to your pipeline`;
+    const version = state.cvs.find((cv) => cv.id === state.cvId);
+    $("[data-run-cv]").textContent = version?.label || "Choose a CV";
+    $("[data-run-cv-meta]").textContent = version ? `${version.filename} · ${new Date(version.created_at).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}` : "";
+    renderAdvisors();
+  }
+
+  // Creates or updates the application, saves the posting, then runs the board.
+  async function saveApplication() {
+    const job = jobInput(); let application = selectedApplication();
+    if (!application) {
+      const company = $("[data-new-company]").value.trim(); const role = $("[data-new-role]").value.trim();
+      application = await api("/api/applications", { method: "POST", ...jsonBody({
+        company: company || "Unknown company",
+        role: role || (job.file ? job.file.name.replace(/\.[^.]+$/, "") : "Untitled role"),
+        cv_version_id: state.cvId,
+        job_url: job.url,
+      }) });
+      // From here on it is a tracked application, so a retry never creates a duplicate.
+      state.applications.unshift(application); renderApplications(application.id); setMode("existing");
+      if (job.url) setSource("link"); else if (job.file) setSource("file"); else if (job.text) setSource("text");
+    } else {
+      application = await api(`/api/applications/${application.id}`, { method: "PATCH", ...jsonBody({ cv_version_id: state.cvId, ...(job.url ? { job_url: job.url } : {}) }) });
+    }
+    if (job.file) {
+      const body = new FormData(); body.append("job_file", job.file);
+      application = await api(`/api/applications/${application.id}/job-description`, { method: "POST", body });
+    } else if ((job.url || job.text) && application.job_description_filename) {
+      application = await api(`/api/applications/${application.id}/job-description`, { method: "DELETE" });
+    }
+    state.applications = state.applications.map((item) => (item.id === application.id ? application : item));
+    return { application, jobText: job.text };
+  }
+
   $("[data-run-review]").addEventListener("click", async () => {
     const ids = selectedAdvisors();
-    if (!ids.length) { setError(3, "Choose at least one specialist."); return; }
+    if (!ids.length) { $("[data-board-details]").open = true; setError(3, "Choose at least one specialist."); return; }
+    if (!state.cvId) { showStep(2); setError(2, "Choose a CV first."); return; }
     setError(3, "");
     $('[data-step="3"]').classList.remove("visible");
     $("[data-review-progress]").hidden = false;
+    $("[data-progress-title]").textContent = "Saving the application…";
     window.scrollTo({ top: 0, behavior: "smooth" });
     try {
-      const body = new FormData(); body.append("advisor_ids", ids.join(",")); body.append("job_text", state.jobText);
-      const result = await api(`/api/applications/${state.application.id}/board-review`, { method: "POST", body });
-      state.application = result.application;
-      state.applications = state.applications.map((item) => (item.id === result.application.id ? result.application : item));
-      state.jobText = "";
-      openReport(result.board_review);
-      history.replaceState(null, "", `/review?application=${encodeURIComponent(state.application.id)}`);
+      const { application, jobText } = await saveApplication();
+      $("[data-progress-title]").textContent = "Your board is reviewing the evidence…";
+      const body = new FormData(); body.append("advisor_ids", ids.join(",")); body.append("job_text", jobText);
+      await api(`/api/applications/${application.id}/board-review`, { method: "POST", body });
+      location.href = `/applications/${encodeURIComponent(application.id)}?tab=report`;
     } catch (error) {
       showStep(3); setError(3, error.message);
     }
-  });
-
-  // ---------- Step 4: Report ----------
-  const bandOf = (score) => (score >= 75 ? "strong" : score >= 45 ? "partial" : "weak");
-  function section(className, overline, title) {
-    const node = el("section", className);
-    const heading = el("div", "result-section-heading compact"); const inner = el("div");
-    inner.append(el("span", "overline", overline), el("h2", "", title)); heading.append(inner); node.append(heading);
-    return node;
-  }
-  function numberedItem(tag, index, children) { const item = el(tag); item.append(el("span", "", String(index)), ...children); return item; }
-
-  function openReport(saved) {
-    state.saved = saved;
-    state.cvId = saved.cv_version_id;
-    const review = saved.review; const assessment = saved.assessment; const app = state.application;
-    const cvLabel = state.cvs.find((item) => item.id === saved.cv_version_id)?.label || "Saved CV";
-    $("[data-report-title]").textContent = `${app.role} at ${app.company}`;
-    $("[data-practice-link]").href = `/practice?application=${encodeURIComponent(app.id)}`;
-    $("[data-report-meta]").textContent = `${cvLabel} · ${new Date(saved.created_at).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })} · ${saved.degraded ? "rule-based" : saved.model}`;
-    const body = $("[data-report-body]"); body.replaceChildren();
-
-    if (saved.notice) {
-      const notice = el("div", "ai-degraded-notice"); notice.setAttribute("role", "status");
-      const copy = el("div"); copy.append(el("strong", "", "AI panel unavailable for this run"), el("p", "", saved.notice));
-      notice.append(el("span", "", "i"), copy); body.append(notice);
-    }
-
-    const useAiLedger = !saved.degraded && Array.isArray(review.requirements) && review.requirements.length > 0;
-    const ledgerItems = useAiLedger
-      ? review.requirements.map((item) => ({ term: item.requirement, matched: item.supported, evidence: item.evidence ? [item.evidence] : [] }))
-      : assessment.requirements;
-    const matched = ledgerItems.filter((item) => item.matched);
-    const decision = el("section", "decision-card primary-decision");
-    const score = el("div", "result-score");
-    const scoreValue = el("div"); scoreValue.append(el("strong", "", String(review.fit_score)), el("small", "", "/100"));
-    const band = bandOf(review.fit_score);
-    score.append(el("span", "", saved.degraded ? "Evidence match" : "AI panel fit"), scoreValue, el("span", `band-badge band-${band}`, `${band} match`), el("small", "secondary-score", `Keyword evidence check: ${assessment.score}/100`));
-    const copy = el("div", "decision-copy");
-    copy.append(el("span", "overline", "Board consensus"), el("p", "", review.summary));
-    const facts = el("div", "decision-facts");
-    [[matched.length, "Requirements supported"], [ledgerItems.length - matched.length, "Evidence gaps"]].forEach(([value, label]) => { const fact = el("div"); fact.append(el("strong", "", String(value)), el("span", "", label)); facts.append(fact); });
-    decision.append(score, copy, facts); body.append(decision);
-
-    const board = el("section", "board-report");
-    if (review.advisor_findings?.length) {
-      const verdicts = section("advisor-verdicts", "Your selected specialists", "One finding per advisor");
-      const grid = el("div", "advisor-verdict-grid");
-      review.advisor_findings.forEach((finding) => {
-        const advisor = advisors[finding.advisor_id] || { initials: "AI", name: "Board advisor", role: "Specialist" };
-        const card = el("article", "advisor-verdict");
-        const head = el("div", "advisor-verdict-heading"); const who = el("div");
-        who.append(el("strong", "", advisor.name), el("small", "", advisor.role)); head.append(el("span", "advisor-avatar", advisor.initials), who);
-        const evidence = el("div", "verdict-evidence"); evidence.append(el("span", "", "Evidence used"));
-        if (finding.evidence.length) finding.evidence.forEach((quote) => evidence.append(el("q", "", quote))); else evidence.append(el("p", "", "No direct CV line supports this point yet."));
-        const action = el("div", "verdict-action"); action.append(el("span", "", "→"), el("p", "", finding.recommendation));
-        card.append(head, el("h3", "", finding.headline), el("p", "", finding.finding), evidence, action); grid.append(card);
-      });
-      verdicts.append(grid); board.append(verdicts);
-    }
-    const actions = el("div", "board-action-grid");
-    const tailoring = section("tailoring-plan", "Tailor before sending", "Safe, high-impact edits");
-    const moves = el("div", "tailoring-list");
-    (review.tailoring_moves.length ? review.tailoring_moves : review.next_actions.map((change) => ({ section: "Next action", change, reason: "" }))).forEach((move, index) => {
-      const content = el("div"); content.append(el("strong", "", move.section), el("p", "", move.change)); if (move.reason) content.append(el("small", "", move.reason));
-      moves.append(numberedItem("article", index + 1, [content]));
-    });
-    tailoring.append(moves);
-    const prep = section("interview-prep", "Interview preparation", "Questions to prepare");
-    const list = el("ol");
-    review.interview_questions.forEach((question, index) => list.append(numberedItem("li", index + 1, [el("p", "", question)])));
-    prep.append(list); actions.append(tailoring, prep); board.append(actions); body.append(board);
-
-    const ledger = el("section", "evidence-ledger");
-    const ledgerHead = el("div", "result-section-heading compact"); const ledgerTitle = el("div");
-    ledgerTitle.append(el("span", "overline", "Evidence ledger"), el("h2", "", "Priority requirement evidence")); ledgerHead.append(ledgerTitle, el("span", "", `${ledgerItems.length} reviewed`));
-    const rows = el("div", "evidence-list");
-    ledgerItems.forEach((requirement) => {
-      const row = el("article", `evidence-row ${requirement.matched ? "is-supported" : "is-missing"}`);
-      const status = el("div", "evidence-status"); status.append(el("span", "", requirement.matched ? "✓" : "−"));
-      const detail = el("div"); const head = el("div", "requirement-heading");
-      head.append(el("h3", "requirement-name", requirement.term), el("span", "", requirement.matched ? "Supported" : "Missing evidence"));
-      detail.append(head, el("p", "", requirement.matched ? `“${requirement.evidence[0]}”` : "No direct CV line was found for this requirement."));
-      row.append(status, detail); rows.append(row);
-    });
-    ledger.append(ledgerHead, rows); body.append(ledger);
-
-    resetInterview();
-    $("[data-draft-attach-label]").textContent = `Use this version for ${app.role} at ${app.company}`;
-    showStep(4);
-  }
-  $("[data-new-review]").addEventListener("click", () => {
-    if (state.application) renderApplications(state.application.id);
-    renderCvOptions(); showStep(1);
-  });
-
-  // ---------- Interview ----------
-  function resetInterview() {
-    state.questions = [];
-    $("[data-interview-form]").hidden = true; $("[data-draft]").hidden = true; $("[data-draft-saved]").hidden = true;
-    $("[data-start-interview]").hidden = false; $("[data-interview-notice]").hidden = true;
-    $("[data-questions]").replaceChildren(); $("[data-interview-error]").textContent = ""; $("[data-draft-error]").textContent = "";
-  }
-  function showNotice(text) { const node = $("[data-interview-notice]"); node.textContent = text || ""; node.hidden = !text; }
-  $("[data-start-interview]").addEventListener("click", async (event) => {
-    $("[data-interview-error]").textContent = "";
-    try {
-      await withBusy(event.currentTarget, "Preparing questions…", async () => {
-        const body = new FormData(); if (state.application) body.append("application_id", state.application.id);
-        const result = await api(`/api/cv-versions/${state.cvId}/interview`, { method: "POST", body });
-        state.questions = result.questions; showNotice(result.notice);
-        const container = $("[data-questions]"); container.replaceChildren();
-        result.questions.forEach((item, index) => {
-          const label = el("label", "interview-question");
-          const title = el("span", "interview-question-title"); title.append(el("span", "interview-index", String(index + 1)), el("strong", "", item.question));
-          const area = el("textarea"); area.rows = 4; area.maxLength = 1500; area.placeholder = "Your answer — specific facts, numbers, tools, outcomes."; area.dataset.answerIndex = String(index);
-          label.append(title); if (item.purpose) label.append(el("small", "", item.purpose)); label.append(area); container.append(label);
-        });
-        $("[data-interview-form]").hidden = false; event.currentTarget.hidden = true;
-        $("[data-interview-form] textarea")?.focus();
-      });
-    } catch (error) { $("[data-interview-error]").textContent = error.message; $("[data-interview-form]").hidden = false; }
-  });
-  $("[data-interview-form]").addEventListener("submit", async (event) => {
-    event.preventDefault();
-    const answers = state.questions.map((item, index) => ({ question: item.question, answer: $(`[data-answer-index="${index}"]`).value.trim() }));
-    if (!answers.some((item) => item.answer)) { $("[data-interview-error]").textContent = "Answer at least one question."; return; }
-    $("[data-interview-error]").textContent = "";
-    try {
-      await withBusy($("[data-write-draft]"), "Writing your revised CV…", async () => {
-        const result = await api(`/api/cv-versions/${state.cvId}/interview/draft`, { method: "POST", ...jsonBody({ application_id: state.application?.id || null, answers }) });
-        showNotice(result.notice);
-        $("[data-draft-changes]").replaceChildren(...result.draft.changes.map((change) => el("li", "", change)));
-        $("[data-draft-text]").value = result.draft.cv_text;
-        const base = state.cvs.find((item) => item.id === state.cvId)?.label || "CV";
-        $("[data-draft-label]").value = `${base} · ${state.application ? state.application.company : "revised"}`.slice(0, 100);
-        $("[data-draft]").hidden = false;
-        $("[data-draft]").scrollIntoView({ behavior: "smooth", block: "start" });
-      });
-    } catch (error) { $("[data-interview-error]").textContent = error.message; }
-  });
-  $("[data-save-draft]").addEventListener("click", async (event) => {
-    const text = $("[data-draft-text]").value.trim(); const label = $("[data-draft-label]").value.trim();
-    const error = $("[data-draft-error]"); error.textContent = "";
-    if (!text || !label) { error.textContent = "Add a label and keep some CV text before saving."; return; }
-    try {
-      await withBusy(event.currentTarget, "Saving…", async () => {
-        const body = new FormData(); body.append("label", label); body.append("cv_text", text);
-        const version = await api(`/api/cv-versions/${state.cvId}/revisions`, { method: "POST", body });
-        state.cvs.unshift(version);
-        let attached = false;
-        if (state.application && $("[data-draft-attach]").checked) {
-          state.application = await api(`/api/applications/${state.application.id}`, { method: "PATCH", ...jsonBody({ cv_version_id: version.id }) });
-          attached = true;
-        }
-        state.newVersion = version;
-        $("[data-draft-saved-copy]").textContent = `"${version.label}" is a new version in your library${attached ? ` and is now attached to ${state.application.role} at ${state.application.company}` : ""}. Your original CV is unchanged.`;
-        $("[data-draft]").hidden = true; $("[data-interview-form]").hidden = true; $("[data-draft-saved]").hidden = false;
-      });
-    } catch (exc) { error.textContent = exc.message; }
-  });
-  $("[data-draft-download]").addEventListener("click", async (event) => {
-    event.preventDefault();
-    const version = state.newVersion; if (!version) return;
-    const response = await fetch(`/api/cv-versions/${version.id}/download`, { headers: authToken ? { Authorization: `Bearer ${authToken}` } : {} });
-    if (!response.ok) return;
-    const url = URL.createObjectURL(await response.blob()); const link = document.createElement("a");
-    link.href = url; link.download = version.filename; link.click(); URL.revokeObjectURL(url);
-  });
-  $("[data-review-new-version]").addEventListener("click", () => {
-    if (!state.newVersion) return;
-    state.cvId = state.newVersion.id; renderCvOptions();
-    if (state.application) renderApplications(state.application.id);
-    showStep(3);
-  });
-  $("[data-print-draft]").addEventListener("click", () => {
-    const view = window.open("", "_blank");
-    if (!view) return;
-    view.document.title = $("[data-draft-label]").value || "CV";
-    const pre = view.document.createElement("pre");
-    pre.textContent = $("[data-draft-text]").value;
-    pre.setAttribute("style", "white-space: pre-wrap; font: 11pt/1.45 Georgia, 'Times New Roman', serif; margin: 18mm; color: #111;");
-    view.document.body.append(pre);
-    view.focus(); view.print();
   });
 
   // ---------- Start ----------
   async function load() {
     const [cvs, applications] = await Promise.all([api("/api/cv-versions"), api("/api/applications")]);
     state.cvs = cvs; state.applications = applications;
-    state.cvId = state.cvId || cvs[0]?.id || "";
-    renderCvOptions(); renderApplications(); renderAdvisors();
+    state.cvId = cvs[0]?.id || "";
+    renderApplications(); renderAdvisors();
     $("[data-loading-workspace]").hidden = true;
-    const requested = new URLSearchParams(location.search).get("application");
-    if (requested) {
-      const app = applications.find((item) => item.id === requested);
-      if (app) {
-        state.application = app;
-        if (app.cv_version_id) state.cvId = app.cv_version_id;
-        renderCvOptions(); renderApplications(app.id);
-        if (app.has_board_review) {
-          try { const result = await api(`/api/applications/${app.id}/board-review`); state.application = result.application; openReport(result.board_review); return; }
-          catch (_) { /* fall through to the guided steps */ }
-        }
-      }
-    }
-    showStep(1);
+    const requested = applications.find((item) => item.id === new URLSearchParams(location.search).get("application"));
+    if (!requested) { setMode("new"); showStep(1); return; }
+    // Started from an application: skip whatever is already known.
+    renderApplications(requested.id); setMode("existing");
+    if (requested.cv_version_id) state.cvId = requested.cv_version_id;
+    renderCvOptions();
+    if (!hasSavedJob(requested)) showStep(1);
+    else if (!requested.cv_version_id) showStep(2);
+    else showStep(3);
   }
   async function enter(session) {
     if (session.access !== "approved") throw new Error("Workspace access is not approved");

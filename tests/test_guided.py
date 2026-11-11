@@ -51,7 +51,32 @@ def test_guided_review_page_renders_steps_and_advisor_data() -> None:
     assert response.status_code == 200
     assert 'id="advisors-data"' in response.text
     assert '"id": "recruiter"' in response.text
+    assert "Which job is this for?" in response.text
+    assert "Step 1 of 3" in response.text and "Step 4" not in response.text
+
+
+def test_application_page_renders_tabs_for_the_application() -> None:
+    response = client.get("/applications/abc123")
+    assert response.status_code == 200
+    assert 'data-application-id="abc123"' in response.text
+    assert 'id="advisors-data"' in response.text
+    for tab in ("report", "improve", "answers", "practice", "details"):
+        assert f'data-tab="{tab}"' in response.text
     assert "Answer a few questions. Get a stronger CV." in response.text
+    assert "data-practice-deck" in response.text
+
+
+def test_get_single_application_is_owner_scoped() -> None:
+    headers, version, application = _setup("guided-single", job_text="Python Kubernetes")
+    url = f"/api/applications/{application['id']}"
+    body = client.get(url, headers=headers).json()
+    assert body["id"] == application["id"]
+    assert body["cv_version_id"] == version["id"]
+    assert body["job_description_filename"] == "job.txt"
+    assert body["has_board_review"] is False
+    assert "job_description" not in body
+    assert client.get(url, headers={"x-advisory-user": "someone-else"}).status_code == 404
+    assert client.get("/api/applications/missing", headers=headers).status_code == 404
 
 
 def test_board_review_is_saved_and_reopened() -> None:

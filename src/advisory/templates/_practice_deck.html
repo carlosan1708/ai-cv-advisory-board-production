@@ -1,0 +1,48 @@
+<div class="practice-deck" data-practice-deck>
+    <p class="form-error" data-practice-error role="alert"></p>
+
+    <section class="practice-body" data-practice-body hidden>
+      <div class="level-strip" data-level-strip></div>
+
+      <div class="deck-controls">
+        <div class="deck-summary" data-deck-summary></div>
+        <div class="deck-actions">
+          <label>Level <select data-generate-level data-testid="generate-level"><option value="1">1 · Warm-up</option><option value="2">2 · Role-specific</option><option value="3">3 · Tough</option></select></label>
+          <button class="button button-primary button-small" type="button" data-generate data-testid="generate-cards">Add 5 cards</button>
+        </div>
+      </div>
+      <p class="practice-notice" data-practice-notice hidden></p>
+
+      <div class="practice-filter" role="group" aria-label="Which cards to practise">
+        <button type="button" data-filter="due" class="active">Due now</button>
+        <button type="button" data-filter="all">All cards</button>
+        <button type="button" data-filter="1">Level 1</button>
+        <button type="button" data-filter="2">Level 2</button>
+        <button type="button" data-filter="3">Level 3</button>
+      </div>
+
+      <section class="flashcard" data-flashcard hidden aria-live="polite">
+        <div class="flashcard-top"><span class="level-chip" data-card-level></span><span class="card-progress" data-card-progress></span></div>
+        <h2 class="flashcard-question" data-card-question data-testid="card-question"></h2>
+        <p class="flashcard-hint" data-card-hint>Answer out loud or jot it down, then flip.</p>
+        <label class="answer-field">Your answer <span class="optional-label">optional, saved with the card</span><textarea rows="4" maxlength="3000" data-card-answer placeholder="Key points of your answer…"></textarea></label>
+        <button class="button button-secondary flip-button" type="button" data-flip data-testid="flip-card">Show key points <kbd>Space</kbd></button>
+        <div class="flashcard-back" data-card-back hidden>
+          <h3>A strong answer covers</h3>
+          <ul data-card-points></ul>
+          <div class="rating-row" role="group" aria-label="How did it go?">
+            <button type="button" data-rate="again"><strong>Again</strong><small>1 · forgot</small></button>
+            <button type="button" data-rate="hard"><strong>Hard</strong><small>2 · shaky</small></button>
+            <button type="button" data-rate="good" data-testid="rate-good"><strong>Good</strong><small>3 · solid</small></button>
+            <button type="button" data-rate="easy"><strong>Easy</strong><small>4 · effortless</small></button>
+          </div>
+          <div class="card-tools"><button class="text-action as-button" type="button" data-save-answer>Save my answer to the application's Answers</button><button class="text-action as-button danger-text" type="button" data-delete-card>Delete card</button></div>
+        </div>
+      </section>
+
+      <section class="practice-empty" data-practice-empty hidden>
+        <h2 data-empty-title>No cards yet.</h2>
+        <p data-empty-copy>Pick a level and add cards. Start with Warm-up and move up as cards become easy.</p>
+      </section>
+    </section>
+</div>

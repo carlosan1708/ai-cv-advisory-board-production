@@ -657,6 +657,11 @@ def list_applications(request: Request) -> list[dict[str, object]]:
     ]
 
 
+@app.get("/api/applications/{application_id}")
+def get_application(request: Request, application_id: str) -> dict[str, object]:
+    return application_payload(_application_or_404(owner_id(request), application_id))
+
+
 @app.post("/api/applications", status_code=201)
 def create_application(request: Request, payload: ApplicationCreate) -> dict[str, object]:
     try:
@@ -1135,6 +1140,20 @@ def practice_page(request: Request) -> HTMLResponse:
         request=request,
         name="practice.html",
         context={"auth_mode": settings.auth_mode, "google_oauth_client_id": settings.google_oauth_client_id},
+    )
+
+
+@app.get("/applications/{application_id}", response_class=HTMLResponse)
+def application_page(request: Request, application_id: str) -> HTMLResponse:
+    return templates.TemplateResponse(
+        request=request,
+        name="application.html",
+        context={
+            "auth_mode": settings.auth_mode,
+            "google_oauth_client_id": settings.google_oauth_client_id,
+            "application_id": application_id,
+            "advisors_data": [asdict(advisor) for advisor in ADVISORS],
+        },
     )
 
 

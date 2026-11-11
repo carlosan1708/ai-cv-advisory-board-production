@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Guided review | AI CV Advisory Board</title>
-  <meta name="description" content="Review a saved CV against an application with your advisory board, then improve it with a short interview.">
-  <link rel="stylesheet" href="/static/app.css?v=13"><link rel="stylesheet" href="/static/tracker.css?v=13"><link rel="stylesheet" href="/static/review.css?v=4">
+  <meta name="description" content="Review a CV against a job with your advisory board and save the report on the application.">
+  <link rel="stylesheet" href="/static/app.css?v=13"><link rel="stylesheet" href="/static/tracker.css?v=14"><link rel="stylesheet" href="/static/review.css?v=5">
   {% if auth_mode == "google" %}<script src="https://accounts.google.com/gsi/client" async defer></script>{% endif %}
 </head>
 <body class="tracker-page guided-review-page">
@@ -20,38 +20,27 @@
   <main class="review-shell">
     <div class="workspace-title">
       <span class="overline">Guided review &middot; saved to your pipeline</span>
-      <h1>Review a CV against a real application.</h1>
-      <p>Pick a saved CV, choose the job, assemble your board, and keep the full report on the application. Then improve the CV with a short interview.</p>
+      <h1>Get the board's view on a job.</h1>
+      <p>Add the job, pick your CV, and run the review. The report is saved on the application, next to your answers and interview practice.</p>
     </div>
-
-    <nav class="progress-rail" aria-label="Review progress">
-      <div class="progress-step active" data-step-indicator="1"><span class="progress-marker">1</span><div><strong>CV</strong><small>From your library</small></div></div>
-      <div class="progress-step" data-step-indicator="2"><span class="progress-marker">2</span><div><strong>Job</strong><small>Link, PDF, or text</small></div></div>
-      <div class="progress-step" data-step-indicator="3"><span class="progress-marker">3</span><div><strong>Board</strong><small>Choose advisors</small></div></div>
-      <div class="progress-step" data-step-indicator="4"><span class="progress-marker">4</span><div><strong>Report</strong><small>Saved &amp; improve</small></div></div>
+    <nav class="progress-rail three-steps" aria-label="Review progress">
+      <div class="progress-step active" data-step-indicator="1"><span class="progress-marker">1</span><div><strong>Job</strong><small>Link, PDF, or text</small></div></div>
+      <div class="progress-step" data-step-indicator="2"><span class="progress-marker">2</span><div><strong>CV</strong><small>From your library</small></div></div>
+      <div class="progress-step" data-step-indicator="3"><span class="progress-marker">3</span><div><strong>Review</strong><small>Check and run</small></div></div>
     </nav>
     <p class="workspace-loading" data-loading-workspace>Loading your workspace&hellip;</p>
 
-    <section class="review-panel" data-step="1" aria-labelledby="step-cv-title">
-      <div class="panel-heading"><span class="stage-label">Step 1 of 3</span><h2 id="step-cv-title" tabindex="-1">Which CV should the board review?</h2><p>Choose a version from your library, or upload a new one. Uploads are saved to your library.</p></div>
-      <div class="choice-list" data-cv-options role="radiogroup" aria-label="Saved CV versions"></div>
-      <p class="choice-empty" data-cv-empty hidden>Your library is empty. Upload your CV below to start.</p>
-      <details class="fallback-disclosure" data-cv-upload-panel>
-        <summary>Upload a new CV <span aria-hidden="true">+</span></summary>
-        <div class="fallback-content upload-inline">
-          <label>Version label <input name="cv_label" maxlength="100" placeholder="General · November 2026" data-cv-label></label>
-          <label>CV file <input type="file" accept=".pdf,.txt,application/pdf,text/plain" data-cv-file data-testid="guided-cv-file"><small>PDF or TXT &middot; up to 5 MB</small></label>
-        </div>
-      </details>
-      <p class="form-error" data-step-error="1" role="alert"></p>
-      <div class="panel-actions"><a class="text-action" href="/dashboard">&larr; Dashboard</a><button class="button button-primary" type="button" data-next="1">Continue to job <span aria-hidden="true">&rarr;</span></button></div>
-    </section>
-
-    <section class="review-panel" data-step="2" aria-labelledby="step-job-title">
-      <div class="panel-heading"><span class="stage-label">Step 2 of 3</span><h2 id="step-job-title" tabindex="-1">Which job is this for?</h2><p>Add the posting &mdash; a link, a PDF, or the text. We fill in the company and role, and keep the report in your pipeline.</p></div>
-
+    <section class="review-panel" data-step="1" aria-labelledby="step-job-title">
+      <div class="panel-heading"><span class="stage-label">Step 1 of 3</span><h2 id="step-job-title" tabindex="-1">Which job is this for?</h2></div>
+      <div class="job-mode-switch" role="radiogroup" aria-label="New or existing application">
+        <label><input type="radio" name="job_mode" value="new" checked data-job-mode data-testid="job-mode-new"><span><strong>A new posting</strong><small>Adds it to your pipeline</small></span></label>
+        <label><input type="radio" name="job_mode" value="existing" data-job-mode data-testid="job-mode-existing"><span><strong>An application I'm tracking</strong><small data-existing-count>Pick from your pipeline</small></span></label>
+      </div>
+      <label class="stacked-label existing-picker" data-existing-picker hidden>Application
+        <select data-application-select data-testid="guided-application"></select>
+      </label>
       <div class="job-source-card">
-        <div class="job-source-heading"><strong>Job posting</strong><span>One is enough</span></div>
+        <div class="job-source-heading"><strong>Job posting</strong><span data-source-hint>One is enough</span></div>
         <div class="source-tabs" role="tablist" aria-label="Job posting source">
           <button type="button" role="tab" data-source-tab="saved" hidden>Use saved</button>
           <button type="button" role="tab" data-source-tab="link">Link</button>
@@ -64,86 +53,70 @@
         <div class="source-panel" data-source-panel="text" hidden><label class="stacked-label">Job description <textarea rows="7" maxlength="30000" placeholder="Paste responsibilities and requirements…" data-job-text></textarea></label></div>
         <p class="preview-status" data-preview-status aria-live="polite"></p>
       </div>
-
       <div class="field-grid two-columns" data-new-fields>
         <label class="stacked-label">Company <input maxlength="120" placeholder="Filled from the posting" data-new-company autocomplete="organization"></label>
         <label class="stacked-label">Role <input maxlength="160" placeholder="Filled from the posting" data-new-role></label>
       </div>
-
-      <label class="stacked-label save-to">Save to <span class="optional-label">optional</span>
-        <select data-application-select data-testid="guided-application"><option value="">New application from this posting</option></select>
-      </label>
-      <p class="save-to-hint" data-save-to-hint>A new application is added to your pipeline with this report.</p>
-
-      <p class="form-error" data-step-error="2" role="alert"></p>
-      <div class="panel-actions"><button class="text-action as-button" type="button" data-back="1">&larr; Back to CV</button><button class="button button-primary" type="button" data-next="2">Choose your board <span aria-hidden="true">&rarr;</span></button></div>
+      <p class="form-error" data-step-error="1" role="alert"></p>
+      <div class="panel-actions"><a class="text-action" href="/dashboard">&larr; Dashboard</a><button class="button button-primary" type="button" data-next="1">Continue to CV <span aria-hidden="true">&rarr;</span></button></div>
     </section>
 
-    <section class="review-panel" data-step="3" aria-labelledby="step-board-title">
-      <div class="panel-heading"><span class="stage-label">Step 3 of 3</span><h2 id="step-board-title" tabindex="-1">Assemble your advisory board.</h2><p>Choose up to three specialists. Each gives one evidence-grounded finding.</p></div>
-      <section class="board-composer">
-        <div class="board-composer-heading"><div><span class="overline">Panel composition</span><h3>Build the panel you want</h3></div><span class="board-selection-count"><strong data-advisor-count>0</strong> of 3 selected</span></div>
-        <div class="board-presets" aria-label="Panel presets">
-          <button type="button" data-advisor-preset="recruiter,hiring_manager,technical">Balanced</button>
-          <button type="button" data-advisor-preset="technical,impact,startup">Builder</button>
-          <button type="button" data-advisor-preset="hiring_manager,executive,impact">Leadership</button>
+    <section class="review-panel" data-step="2" aria-labelledby="step-cv-title">
+      <div class="panel-heading"><span class="stage-label">Step 2 of 3</span><h2 id="step-cv-title" tabindex="-1">Which CV are you sending?</h2><p>Pick a version from your library, or upload a new one. Uploads are saved to your library.</p></div>
+      <div class="choice-list" data-cv-options role="radiogroup" aria-label="Saved CV versions"></div>
+      <p class="choice-empty" data-cv-empty hidden>Your library is empty. Upload your CV below to start.</p>
+      <details class="fallback-disclosure" data-cv-upload-panel>
+        <summary>Upload a new CV <span aria-hidden="true">+</span></summary>
+        <div class="fallback-content upload-inline">
+          <label>Version label <input name="cv_label" maxlength="100" placeholder="General · November 2026" data-cv-label></label>
+          <label>CV file <input type="file" accept=".pdf,.txt,application/pdf,text/plain" data-cv-file data-testid="guided-cv-file"><small>PDF or TXT &middot; up to 5 MB</small></label>
         </div>
-      </section>
-      <div class="advisor-picker">
-        {% for advisor in advisors %}
-        <label class="advisor-option{% if advisor.id in default_advisor_ids %} selected{% endif %}">
-          <input type="checkbox" value="{{ advisor.id }}" data-advisor-option {% if advisor.id in default_advisor_ids %}checked{% endif %}>
-          <span class="advisor-option-avatar">{{ advisor.initials }}</span>
-          <span class="advisor-option-copy"><strong>{{ advisor.name }}</strong><small>{{ advisor.role }}</small><em>{{ advisor.focus }}</em></span>
-          <span class="advisor-option-check" aria-hidden="true">&check;</span>
-        </label>
-        {% endfor %}
+      </details>
+      <p class="form-error" data-step-error="2" role="alert"></p>
+      <div class="panel-actions"><button class="text-action as-button" type="button" data-back="1">&larr; Back to job</button><button class="button button-primary" type="button" data-next="2">Continue <span aria-hidden="true">&rarr;</span></button></div>
+    </section>
+
+    <section class="review-panel" data-step="3" aria-labelledby="step-run-title">
+      <div class="panel-heading"><span class="stage-label">Step 3 of 3</span><h2 id="step-run-title" tabindex="-1">Ready for the board.</h2></div>
+      <div class="run-summary">
+        <div class="run-row"><span class="run-key">Job</span><div><strong data-run-job data-testid="run-job"></strong><small data-run-job-source></small></div><button class="text-action as-button" type="button" data-back="1">Change</button></div>
+        <div class="run-row"><span class="run-key">CV</span><div><strong data-run-cv data-testid="run-cv"></strong><small data-run-cv-meta></small></div><button class="text-action as-button" type="button" data-back="2">Change</button></div>
+        <details class="run-row board-row" data-board-details>
+          <summary><span class="run-key">Board</span><div><strong data-run-board></strong><small>Up to three specialists, one finding each</small></div><span class="text-action">Change</span></summary>
+          <div class="board-editor">
+            <div class="board-presets" aria-label="Panel presets">
+              <button type="button" data-advisor-preset="recruiter,hiring_manager,technical">Balanced</button>
+              <button type="button" data-advisor-preset="technical,impact,startup">Builder</button>
+              <button type="button" data-advisor-preset="hiring_manager,executive,impact">Leadership</button>
+              <span class="board-selection-count"><strong data-advisor-count>0</strong> of 3 selected</span>
+            </div>
+            <div class="advisor-picker">
+              {% for advisor in advisors %}
+              <label class="advisor-option{% if advisor.id in default_advisor_ids %} selected{% endif %}">
+                <input type="checkbox" value="{{ advisor.id }}" data-advisor-option {% if advisor.id in default_advisor_ids %}checked{% endif %}>
+                <span class="advisor-option-avatar">{{ advisor.initials }}</span>
+                <span class="advisor-option-copy"><strong>{{ advisor.name }}</strong><small>{{ advisor.role }}</small><em>{{ advisor.focus }}</em></span>
+                <span class="advisor-option-check" aria-hidden="true">&check;</span>
+              </label>
+              {% endfor %}
+            </div>
+          </div>
+        </details>
       </div>
       <p class="form-error" data-step-error="3" role="alert"></p>
-      <div class="panel-actions"><button class="text-action as-button" type="button" data-back="2">&larr; Back to job</button><button class="button button-primary" type="button" data-run-review data-testid="guided-run-review">Start board review <span aria-hidden="true">&rarr;</span></button></div>
+      <div class="panel-actions"><span class="hint">Takes 15–30 seconds. The report is saved on the application.</span><button class="button button-primary" type="button" data-run-review data-testid="guided-run-review">Run board review <span aria-hidden="true">&rarr;</span></button></div>
     </section>
 
     <section class="analysis-overlay" data-review-progress hidden aria-live="polite">
       <div class="analysis-orbit" aria-hidden="true"><span></span><i></i><i></i><i></i></div>
       <span class="overline">Board in session</span>
-      <h2>Your board is reviewing the evidence…</h2>
+      <h2 data-progress-title>Your board is reviewing the evidence…</h2>
       <p>Each specialist checks the same CV and job from a different angle. This usually takes 15–30 seconds.</p>
       <small>Please keep this page open.</small>
     </section>
-
-    <section class="guided-report" data-step="4" hidden aria-labelledby="report-title">
-      <div class="report-toolbar"><div><span class="overline">Saved report</span><h2 id="report-title" tabindex="-1" data-report-title>Board report</h2><small data-report-meta></small></div><div class="report-toolbar-actions"><a class="button button-primary button-small" data-practice-link href="/practice">Practise for this interview</a><button class="button button-secondary button-small" type="button" data-new-review>Review again</button><a class="button button-secondary button-small" href="/dashboard">Dashboard</a></div></div>
-      <div data-report-body></div>
-
-      <section class="interview-panel" aria-labelledby="interview-title" data-interview>
-        <div class="interview-heading"><div><span class="overline">Improve this CV</span><h2 id="interview-title">Answer a few questions. Get a stronger CV.</h2><p>The AI asks about real work your CV doesn't show yet, then drafts a revised CV using only your CV and your answers. You edit the draft before anything is saved, and your original version is never changed.</p></div><button class="button button-primary" type="button" data-start-interview data-testid="start-interview">Start the interview</button></div>
-        <p class="interview-notice" data-interview-notice hidden></p>
-        <form class="interview-form" data-interview-form hidden>
-          <div data-questions></div>
-          <p class="form-error" data-interview-error role="alert"></p>
-          <div class="panel-actions"><span class="hint">Skip any question you can't answer truthfully. Your answers are saved on the application.</span><button class="button button-primary" type="submit" data-write-draft data-testid="write-draft">Write my revised CV</button></div>
-        </form>
-        <div class="draft-panel" data-draft hidden>
-          <h3>What changed</h3>
-          <ul class="draft-changes" data-draft-changes></ul>
-          <label>Revised CV <span class="optional-label">Check every line. Edit anything that isn't exactly true.</span><textarea rows="22" maxlength="30000" data-draft-text data-testid="draft-text"></textarea></label>
-          <div class="field-grid two-columns">
-            <label>New version label <input maxlength="100" data-draft-label></label>
-            <label class="confirm-check attach-check"><input type="checkbox" checked data-draft-attach><span data-draft-attach-label>Use this version for the application</span></label>
-          </div>
-          <p class="form-error" data-draft-error role="alert"></p>
-          <div class="panel-actions"><button class="button button-secondary" type="button" data-print-draft>Print / save as PDF</button><button class="button button-primary" type="button" data-save-draft data-testid="save-draft">Save as new CV version</button></div>
-        </div>
-        <div class="draft-saved" data-draft-saved hidden role="status">
-          <strong>Saved to your CV library.</strong>
-          <p data-draft-saved-copy></p>
-          <div class="panel-actions"><a class="button button-secondary button-small" data-draft-download>Download</a><a class="button button-secondary button-small" href="/cvs">Open CV library</a><button class="button button-primary button-small" type="button" data-review-new-version>Review the new version</button></div>
-        </div>
-      </section>
-    </section>
   </main>
-  <nav class="mobile-workspace-nav" aria-label="Mobile workspace navigation"><a href="/dashboard">Dashboard</a><a class="active" href="/review">Review</a><a href="/cvs">CVs</a></nav>
+  <nav class="mobile-workspace-nav" aria-label="Mobile workspace navigation"><a href="/dashboard">Dashboard</a><a class="active" href="/review">Review</a><a href="/practice">Practice</a><a href="/cvs">CVs</a></nav>
   <script type="application/json" id="advisors-data">{{ advisors_data | tojson }}</script>
-  <script src="/static/review.js?v=5" defer></script>
+  <script src="/static/review.js?v=6" defer></script>
 </body>
 </html>

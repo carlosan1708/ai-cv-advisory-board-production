@@ -90,15 +90,8 @@ def test_cv_library_reviews_and_saves_a_new_version(page: Page, tmp_path: Path) 
     page.get_by_role("button", name="Save new version").click()
     expect(page.get_by_role("heading", name=f"{label} revised")).to_be_visible()
     page.goto(f"{BASE_URL}/dashboard")
-    page.get_by_role("button", name="Quick CV check").click()
-    panel = page.locator("[data-expert-dialog]")
-    expect(panel.locator("[data-expert-application-fields]")).to_be_hidden()
-    panel.get_by_label("CV version").select_option(label=f"{label} revised")
-    panel.get_by_role("button", name="Ask the AI panel").click()
-    expect(panel.locator("[data-expert-result]")).to_be_visible()
-    expect(panel.get_by_role("heading", name="Recruiter")).to_be_visible()
-    expect(panel.get_by_role("heading", name="Hiring Manager")).to_be_visible()
-    expect(panel.get_by_role("heading", name="Technical Reviewer")).to_be_visible()
+    expect(page.get_by_role("link", name="Check a CV on its own")).to_have_attribute("href", "/cvs")
+    expect(page.locator("[data-expert-dialog]")).to_have_count(0)
 
 
 def test_tracker_add_move_filter_and_funnel_update(page: Page) -> None:
@@ -135,9 +128,7 @@ def test_tracker_uploads_and_attaches_exact_cv_version(page: Page, tmp_path: Pat
     page.get_by_role("button", name="Add application", exact=True).first.click()
     page.get_by_label("Company").fill("Northstar")
     page.get_by_label("Role").fill(f"ML Platform Lead {uuid4().hex[:6]}")
-    page.locator("[data-application-dialog]").get_by_label("CV version").select_option(
-        label=version_label
-    )
+    page.locator("[data-application-dialog]").get_by_label("CV version").select_option(label=version_label)
     page.get_by_role("button", name="Add application", exact=True).last.click()
     expect(page.get_by_text(f"CV · {version_label}")).to_be_visible()
 
@@ -156,9 +147,7 @@ def test_workspace_can_be_archived_started_fresh_and_viewed(page: Page) -> None:
     archive_dialog = page.locator("[data-archive-dialog]")
     expect(archive_dialog.locator("[data-archive-summary]")).to_contain_text("applications and")
     archive_dialog.get_by_label("Archive name").fill(archive_label)
-    archive_dialog.get_by_label(
-        "I understand my active dashboard and CV library will become empty."
-    ).check()
+    archive_dialog.get_by_label("I understand my active dashboard and CV library will become empty.").check()
     archive_dialog.get_by_role("button", name="Archive and start fresh").click()
 
     history_dialog = page.locator("[data-history-dialog]")
@@ -243,9 +232,7 @@ def test_uploaded_cv_and_manual_job_complete_review(page: Page, tmp_path: Path) 
     page.get_by_role("button", name="Choose your board").click()
     expect(page.get_by_role("heading", name="Assemble your advisory board.")).to_be_visible()
     expect(page.locator("[data-advisor-count]")).to_have_text("3")
-    expect(page.get_by_role("button", name="Balanced", exact=True)).to_have_attribute(
-        "aria-pressed", "true"
-    )
+    expect(page.get_by_role("button", name="Balanced", exact=True)).to_have_attribute("aria-pressed", "true")
     page.get_by_test_id("analyze-button").click()
     expect(page.get_by_test_id("results")).to_be_visible()
     expect(page.get_by_test_id("evidence-gaps")).to_contain_text("kubernetes")
@@ -269,9 +256,7 @@ def test_evidence_ledger_ignores_job_page_boilerplate(page: Page, tmp_path: Path
     expect(ledger.get_by_role("heading", name="What", exact=True)).to_have_count(0)
 
 
-def test_board_selection_is_interactive_bounded_and_has_visible_progress(
-    page: Page, tmp_path: Path
-) -> None:
+def test_board_selection_is_interactive_bounded_and_has_visible_progress(page: Page, tmp_path: Path) -> None:
     page.goto(f"{BASE_URL}/workspace")
     open_job_step(page, tmp_path)
     page.get_by_text("Paste the job description instead", exact=False).click()
@@ -281,9 +266,7 @@ def test_board_selection_is_interactive_bounded_and_has_visible_progress(
     cards = page.locator(".advisor-option")
     expect(options).to_have_count(6)
     expect(page.locator("[data-advisor-count]")).to_have_text("3")
-    expect(page.get_by_role("button", name="Balanced", exact=True)).to_have_attribute(
-        "aria-pressed", "true"
-    )
+    expect(page.get_by_role("button", name="Balanced", exact=True)).to_have_attribute("aria-pressed", "true")
     expect(options.nth(4)).to_be_disabled()
     page.get_by_role("button", name="Clear", exact=True).click()
     expect(page.locator("[data-advisor-count]")).to_have_text("0")
@@ -397,93 +380,6 @@ def test_primary_flows_have_clean_browser_console(page: Page, tmp_path: Path) ->
     assert messages == []
 
 
-def test_guided_review_saves_report_and_interview_creates_new_version(page: Page) -> None:
-    suffix = uuid4().hex[:6]
-    page.goto(f"{BASE_URL}/review")
-    expect(page.get_by_role("heading", name="Which CV should the board review?")).to_be_visible()
-    expect(page.locator("[data-loading-workspace]")).to_be_hidden()
-    page.locator("[data-cv-upload-panel]").evaluate("panel => { panel.open = true; }")
-    page.locator("[data-cv-label]").fill(f"Guided CV {suffix}")
-    cv_bytes = b"EXPERIENCE\n- Built Python services on Google Cloud.\nSKILLS\nPython\nEDUCATION\nBSc"
-    page.get_by_test_id("guided-cv-file").set_input_files(
-        files=[{"name": "guided.txt", "mimeType": "text/plain", "buffer": cv_bytes}]
-    )
-    page.get_by_role("button", name="Continue to job").click()
-    page.locator("[data-new-company]").fill(f"Globex {suffix}")
-    page.locator("[data-new-role]").fill("Platform Engineer")
-    page.get_by_role("tab", name="Paste text").click()
-    page.locator("[data-job-text]").fill("Platform Engineer: Python, Kubernetes, Terraform.")
-    page.get_by_role("button", name="Choose your board").click()
-    page.get_by_test_id("guided-run-review").click()
-    expect(page.get_by_role("heading", name=f"Platform Engineer at Globex {suffix}")).to_be_visible()
-    expect(page.locator(".advisor-verdict")).to_have_count(3)
-
-    page.get_by_test_id("start-interview").click()
-    page.locator('[data-answer-index="0"]').fill("Ran 8 services on GKE.")
-    page.get_by_test_id("write-draft").click()
-    expect(page.get_by_test_id("draft-text")).to_have_value(re.compile("Ran 8 services on GKE."))
-    page.get_by_test_id("save-draft").click()
-    expect(page.get_by_text("Saved to your CV library.")).to_be_visible()
-
-    page.goto(f"{BASE_URL}/dashboard")
-    card = page.locator(".application-card", has_text=f"Globex {suffix}")
-    expect(card.get_by_role("link", name=re.compile("Open the saved report"))).to_be_visible()
-
-
-def test_answers_dialog_records_edits_and_searches_answers(page: Page) -> None:
-    company = f"Initech {uuid4().hex[:6]}"
-    page.goto(f"{BASE_URL}/dashboard")
-    page.get_by_role("button", name="Add application").first.click()
-    page.locator("[data-application-form] input[name=company]").fill(company)
-    page.locator("[data-application-form] input[name=role]").fill("Data Engineer")
-    page.locator("[data-application-submit]").click()
-    card = page.locator(".application-card", has_text=company)
-    card.get_by_role("button", name=f"Answers for Data Engineer at {company}").click()
-    dialog = page.locator("[data-answers-dialog]")
-    expect(dialog.get_by_text("No answers saved yet.")).to_be_visible()
-    dialog.locator("[data-answer-source]").select_option("recruiter")
-    dialog.get_by_test_id("answer-question").fill("Why are you leaving your current job?")
-    dialog.get_by_test_id("answer-text").fill("Looking for larger-scale data platforms.")
-    dialog.get_by_test_id("answer-save").click()
-    expect(dialog.locator(".answer-item")).to_have_count(1)
-    expect(dialog.locator(".answer-source")).to_have_text("Recruiter call")
-    dialog.get_by_test_id("answer-question").fill("Notice period?")
-    dialog.get_by_test_id("answer-text").fill("One month.")
-    dialog.get_by_test_id("answer-question").press("Enter")
-    expect(dialog.locator(".answer-item")).to_have_count(2)
-    dialog.locator("[data-answers-search]").fill("notice")
-    expect(dialog.locator(".answer-item")).to_have_count(1)
-    dialog.locator(".answer-item").get_by_role("button", name="Edit").click()
-    dialog.get_by_test_id("answer-text").fill("Two weeks.")
-    dialog.get_by_test_id("answer-save").click()
-    expect(dialog.get_by_text("Two weeks.")).to_be_visible()
-    dialog.locator(".icon-button").click()
-    answers_button = card.get_by_role("button", name=f"Answers for Data Engineer at {company}")
-    expect(answers_button).to_have_text("Answers · 2")
-
-
-def test_guided_review_reads_company_and_role_from_an_uploaded_posting(page: Page) -> None:
-    company = f"Hooli {uuid4().hex[:6]}"
-    page.goto(f"{BASE_URL}/review")
-    expect(page.locator("[data-loading-workspace]")).to_be_hidden()
-    page.locator("[data-cv-upload-panel]").evaluate("panel => { panel.open = true; }")
-    page.get_by_test_id("guided-cv-file").set_input_files(
-        files=[{"name": "cv.txt", "mimeType": "text/plain", "buffer": b"EXPERIENCE\n- Built data pipelines."}]
-    )
-    page.get_by_role("button", name="Continue to job").click()
-    page.get_by_role("tab", name="PDF or TXT").click()
-    posting = f"Senior Data Engineer at {company}\nRequirements: Python, Spark, Airflow.".encode()
-    page.get_by_test_id("guided-job-file").set_input_files(
-        files=[{"name": "posting.txt", "mimeType": "text/plain", "buffer": posting}]
-    )
-    expect(page.locator("[data-preview-status]")).to_contain_text("Posting read")
-    expect(page.locator("[data-new-role]")).to_have_value("Senior Data Engineer")
-    expect(page.locator("[data-new-company]")).to_have_value(company)
-    page.get_by_role("button", name="Choose your board").click()
-    page.get_by_test_id("guided-run-review").click()
-    expect(page.get_by_role("heading", name=f"Senior Data Engineer at {company}")).to_be_visible()
-
-
 def test_practice_cards_flip_rate_and_level_up_controls(page: Page) -> None:
     company = f"Pied Piper {uuid4().hex[:6]}"
     cv = page.request.post(
@@ -518,31 +414,210 @@ def test_practice_cards_flip_rate_and_level_up_controls(page: Page) -> None:
     expect(page.locator("[data-card-level]")).to_have_text("Level 3 · Tough")
 
 
-def test_guided_review_with_an_existing_application_and_a_posting_file(page: Page) -> None:
-    company = f"Thaloz {uuid4().hex[:6]}"
-    cv = page.request.post(
+def _api_cv(
+    page: Page,
+    label: str,
+    text: bytes = b"EXPERIENCE\n- Built Python services on Google Cloud.\nSKILLS\nPython",
+) -> dict:
+    return page.request.post(
         f"{BASE_URL}/api/cv-versions",
-        multipart={
-            "label": "Existing-app CV",
-            "cv_file": {"name": "cv.txt", "mimeType": "text/plain", "buffer": b"EXPERIENCE\n- Built apps."},
-        },
+        multipart={"label": label, "cv_file": {"name": "cv.txt", "mimeType": "text/plain", "buffer": text}},
     ).json()
+
+
+def _api_application(page: Page, company: str, role: str, cv_id: str = "", job: bytes = b"") -> dict:
     application = page.request.post(
         f"{BASE_URL}/api/applications",
-        data={"company": company, "role": "LLM Data Scientist", "cv_version_id": cv["id"]},
+        data={"company": company, "role": role, **({"cv_version_id": cv_id} if cv_id else {})},
     ).json()
+    if job:
+        application = page.request.post(
+            f"{BASE_URL}/api/applications/{application['id']}/job-description",
+            multipart={"job_file": {"name": "JD.txt", "mimeType": "text/plain", "buffer": job}},
+        ).json()
+    return application
+
+
+def test_guided_review_new_posting_lands_on_the_application_report(page: Page) -> None:
+    suffix = uuid4().hex[:6]
     page.goto(f"{BASE_URL}/review")
     expect(page.locator("[data-loading-workspace]")).to_be_hidden()
-    page.get_by_role("button", name="Continue to job").click()
-    expect(page.get_by_test_id("guided-application")).to_have_value("")
-    expect(page.locator("[data-new-fields]")).to_be_visible()
-    page.get_by_test_id("guided-application").select_option(application["id"])
+    expect(page.get_by_role("heading", name="Which job is this for?")).to_be_visible()
+    expect(page.get_by_test_id("job-mode-new")).to_be_checked()
+    expect(page.get_by_test_id("guided-application")).to_be_hidden()
+    page.get_by_role("tab", name="Paste text").click()
+    page.locator("[data-job-text]").fill("Platform Engineer: Python, Kubernetes, Terraform.")
+    page.locator("[data-new-company]").fill(f"Globex {suffix}")
+    page.locator("[data-new-role]").fill("Platform Engineer")
+    page.get_by_role("button", name="Continue to CV").click()
+    expect(page.get_by_role("heading", name="Which CV are you sending?")).to_be_visible()
+    page.locator("[data-cv-upload-panel]").evaluate("panel => { panel.open = true; }")
+    page.locator("[data-cv-label]").fill(f"Guided CV {suffix}")
+    page.get_by_test_id("guided-cv-file").set_input_files(
+        files=[
+            {
+                "name": "guided.txt",
+                "mimeType": "text/plain",
+                "buffer": b"EXPERIENCE\n- Built Python services on Google Cloud.\nSKILLS\nPython",
+            }
+        ]
+    )
+    page.get_by_role("button", name="Continue", exact=True).click()
+    expect(page.get_by_role("heading", name="Ready for the board.")).to_be_visible()
+    expect(page.get_by_test_id("run-job")).to_have_text(f"Platform Engineer at Globex {suffix}")
+    expect(page.get_by_test_id("run-cv")).to_have_text(f"Guided CV {suffix}")
+    board = "Technical Recruiter · Hiring Manager · Technical Reviewer"
+    expect(page.locator("[data-run-board]")).to_have_text(board)
+    page.get_by_test_id("guided-run-review").click()
+
+    expect(page).to_have_url(re.compile(r"/applications/[0-9a-f]+\?tab=report$"))
+    expect(page.get_by_test_id("app-role")).to_have_text("Platform Engineer")
+    expect(page.locator(".advisor-verdict")).to_have_count(3)
+    expect(page.get_by_test_id("next-action")).to_have_text("Improve CV")
+
+    page.get_by_test_id("next-action").click()
+    expect(page).to_have_url(re.compile(r"\?tab=improve$"))
+    page.get_by_test_id("start-interview").click()
+    page.locator('[data-answer-index="0"]').fill("Ran 8 services on GKE.")
+    page.get_by_test_id("write-draft").click()
+    expect(page.get_by_test_id("draft-text")).to_have_value(re.compile("Ran 8 services on GKE."))
+    page.get_by_test_id("save-draft").click()
+    expect(page.get_by_text("Saved to your CV library.")).to_be_visible()
+    expect(page.locator("[data-app-facts]")).to_contain_text(f"Guided CV {suffix} · Globex {suffix}")
+    expect(page.get_by_role("tab", name="Answers · 1")).to_be_visible()
+
+    page.goto(f"{BASE_URL}/dashboard")
+    card = page.locator(".application-card", has_text=f"Globex {suffix}")
+    expect(card.locator(".card-fit")).to_contain_text("Fit")
+    expect(card.get_by_test_id("card-next")).to_have_text("Improve CV")
+    card.get_by_role("link", name="Platform Engineer", exact=True).click()
+    expect(page.get_by_test_id("app-role")).to_have_text("Platform Engineer")
+
+
+def test_guided_review_reads_company_and_role_from_an_uploaded_posting(page: Page) -> None:
+    company = f"Hooli {uuid4().hex[:6]}"
+    _api_cv(page, f"Hooli CV {company}")
+    page.goto(f"{BASE_URL}/review")
+    expect(page.locator("[data-loading-workspace]")).to_be_hidden()
+    page.get_by_role("tab", name="PDF or TXT").click()
+    posting = f"Senior Data Engineer at {company}\nRequirements: Python, Spark, Airflow.".encode()
+    page.get_by_test_id("guided-job-file").set_input_files(
+        files=[{"name": "posting.txt", "mimeType": "text/plain", "buffer": posting}]
+    )
+    expect(page.locator("[data-preview-status]")).to_contain_text("Posting read")
+    expect(page.locator("[data-new-role]")).to_have_value("Senior Data Engineer")
+    expect(page.locator("[data-new-company]")).to_have_value(company)
+    page.get_by_role("button", name="Continue to CV").click()
+    page.get_by_role("button", name="Continue", exact=True).click()
+    expect(page.get_by_test_id("run-job")).to_have_text(f"Senior Data Engineer at {company}")
+    page.get_by_test_id("guided-run-review").click()
+    expect(page.get_by_test_id("app-role")).to_have_text("Senior Data Engineer")
+    expect(page.locator("[data-app-company]")).to_have_text(company)
+
+
+def test_guided_review_with_an_existing_application_and_a_posting_file(page: Page) -> None:
+    company = f"Thaloz {uuid4().hex[:6]}"
+    cv = _api_cv(page, f"Existing-app CV {company}")
+    _api_cv(page, f"Newer CV {company}")
+    application = _api_application(page, company, "LLM Data Scientist", cv["id"])
+    page.goto(f"{BASE_URL}/review")
+    expect(page.locator("[data-loading-workspace]")).to_be_hidden()
+    page.get_by_text("An application I'm tracking").click()
     expect(page.locator("[data-new-fields]")).to_be_hidden()
+    page.get_by_test_id("guided-application").select_option(application["id"])
     page.get_by_role("tab", name="PDF or TXT").click()
     page.get_by_test_id("guided-job-file").set_input_files(
         files=[{"name": "JD.txt", "mimeType": "text/plain", "buffer": b"LLM Data Scientist\nPython, LLMs"}]
     )
-    page.get_by_role("button", name="Choose your board").click()
-    expect(page.locator('[data-step-error="2"]')).to_have_text("")
+    page.get_by_role("button", name="Continue to CV").click()
+    # The application's own CV is preselected, not the newest one in the library.
+    expect(page.locator(".choice-card.selected")).to_contain_text(f"Existing-app CV {company}")
+    page.get_by_role("button", name="Continue", exact=True).click()
+    expect(page.get_by_test_id("run-job")).to_have_text(f"LLM Data Scientist at {company}")
     page.get_by_test_id("guided-run-review").click()
-    expect(page.get_by_role("heading", name=f"LLM Data Scientist at {company}")).to_be_visible()
+    expect(page).to_have_url(re.compile(f"/applications/{application['id']}"))
+    expect(page.locator(".advisor-verdict")).to_have_count(3)
+    expect(page.locator("[data-app-facts]")).to_contain_text("JD.txt")
+
+
+def test_review_from_an_application_skips_known_steps(page: Page) -> None:
+    company = f"Initrode {uuid4().hex[:6]}"
+    cv = _api_cv(page, f"Ready CV {company}")
+    application = _api_application(
+        page, company, "Data Engineer", cv["id"], b"Data Engineer\nPython, SQL, Airflow"
+    )
+    page.goto(f"{BASE_URL}/applications/{application['id']}")
+    expect(page.get_by_test_id("next-action")).to_have_text("Get board review")
+    expect(page.locator("[data-report-empty]")).to_be_visible()
+    page.get_by_test_id("next-action").click()
+    expect(page.get_by_role("heading", name="Ready for the board.")).to_be_visible()
+    expect(page.locator('[data-step-indicator="1"]')).to_have_class(re.compile("complete"))
+    expect(page.get_by_test_id("run-job")).to_have_text(f"Data Engineer at {company}")
+    expect(page.locator("[data-run-job-source]")).to_have_text("Saved file · JD.txt")
+    expect(page.get_by_test_id("run-cv")).to_have_text(f"Ready CV {company}")
+    page.get_by_test_id("guided-run-review").click()
+    expect(page.locator(".advisor-verdict")).to_have_count(3)
+
+    missing = _api_application(page, company, "No Posting Yet", cv["id"])
+    page.goto(f"{BASE_URL}/review?application={missing['id']}")
+    expect(page.get_by_role("heading", name="Which job is this for?")).to_be_visible()
+    expect(page.get_by_test_id("job-mode-existing")).to_be_checked()
+    expect(page.locator("[data-source-hint]")).to_contain_text("no posting yet")
+
+
+def test_application_page_answers_details_and_removal(page: Page) -> None:
+    company = f"Initech {uuid4().hex[:6]}"
+    application = _api_application(page, company, "Data Engineer")
+    page.goto(f"{BASE_URL}/dashboard")
+    card = page.locator(".application-card", has_text=company)
+    expect(card.get_by_test_id("card-next")).to_have_text("Get board review")
+    card.locator(".company-name").click()
+    expect(page).to_have_url(re.compile(f"/applications/{application['id']}"))
+
+    page.get_by_role("tab", name="Answers").click()
+    expect(page.get_by_text("No answers saved yet.")).to_be_visible()
+    page.locator("[data-answer-source]").select_option("recruiter")
+    page.get_by_test_id("answer-question").fill("Why are you leaving your current job?")
+    page.get_by_test_id("answer-text").fill("Looking for larger-scale data platforms.")
+    page.get_by_test_id("answer-save").click()
+    expect(page.locator(".answer-item")).to_have_count(1)
+    expect(page.locator(".answer-source")).to_have_text("Recruiter call")
+    page.get_by_test_id("answer-question").fill("Notice period?")
+    page.get_by_test_id("answer-text").fill("One month.")
+    page.get_by_test_id("answer-question").press("Enter")
+    expect(page.locator(".answer-item")).to_have_count(2)
+    page.locator("[data-answers-search]").fill("notice")
+    expect(page.locator(".answer-item")).to_have_count(1)
+    page.locator(".answer-item").get_by_role("button", name="Edit").click()
+    page.get_by_test_id("answer-text").fill("Two weeks.")
+    page.get_by_test_id("answer-save").click()
+    expect(page.get_by_text("Two weeks.")).to_be_visible()
+    expect(page.get_by_role("tab", name="Answers · 2")).to_be_visible()
+
+    page.get_by_role("tab", name="Details").click()
+    page.locator("[data-details-form] input[name=next_action]").fill("Email the recruiter")
+    page.get_by_test_id("details-save").click()
+    expect(page.locator("[data-details-ok]")).to_have_text("Saved.")
+    expect(page.locator("[data-app-facts]")).to_contain_text("Email the recruiter")
+    page.get_by_test_id("app-status").select_option("interviewing")
+    expect(page.get_by_test_id("next-action")).to_have_text("Get board review")
+    page.reload()
+    expect(page.get_by_test_id("app-status")).to_have_value("interviewing")
+
+    page.once("dialog", lambda dialog: dialog.accept())
+    page.get_by_role("tab", name="Details").click()
+    page.get_by_role("button", name="Remove application").click()
+    expect(page).to_have_url(f"{BASE_URL}/dashboard")
+    expect(page.locator(".application-card", has_text=company)).to_have_count(0)
+
+
+def test_application_page_practice_tab_uses_the_shared_deck(page: Page) -> None:
+    company = f"Pied Piper {uuid4().hex[:6]}"
+    cv = _api_cv(page, f"Deck CV {company}")
+    application = _api_application(page, company, "Backend Engineer", cv["id"])
+    page.goto(f"{BASE_URL}/applications/{application['id']}?tab=practice")
+    expect(page.get_by_text("No cards yet.")).to_be_visible()
+    page.get_by_test_id("generate-cards").click()
+    # Cards are added whether the AI or the rule-based fallback writes them.
+    expect(page.get_by_test_id("card-question")).to_be_visible()
+    expect(page.get_by_role("tab", name=re.compile(r"Practice · \d+"))).to_be_visible()

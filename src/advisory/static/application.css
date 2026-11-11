@@ -1,0 +1,56 @@
+.app-shell { width: min(1040px, calc(100% - 48px)); margin: 0 auto; padding: 28px 0 110px; }
+.app-back { display: inline-block; margin-bottom: 18px; font-size: .78rem; }
+
+.app-head { display: grid; grid-template-columns: 52px 1fr auto; gap: 16px; align-items: center; }
+.app-mark { width: 52px; height: 52px; border-radius: 14px; font-size: .95rem; display: grid; place-items: center; }
+.app-title h1 { margin: 0; font-size: clamp(1.6rem, 3.6vw, 2.3rem); letter-spacing: -.045em; line-height: 1.1; }
+.app-title p { margin: 4px 0 0; color: var(--muted); font-size: .95rem; font-weight: 600; }
+.app-status { display: grid; gap: 5px; font-size: .7rem; font-weight: 800; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+.app-status select { padding: 9px 12px; border: 1px solid var(--line-strong); border-radius: 10px; background: var(--surface); font: inherit; font-size: .84rem; font-weight: 700; color: var(--ink); text-transform: none; letter-spacing: 0; }
+
+.app-facts { margin: 18px 0 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.app-facts > div { padding: 7px 12px; border: 1px solid var(--line); border-radius: 99px; background: var(--surface); display: flex; gap: 6px; align-items: baseline; font-size: .76rem; }
+.app-facts dt { color: var(--muted); font-weight: 700; }
+.app-facts dd { margin: 0; color: var(--ink); font-weight: 650; max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.app-facts .is-empty { border-style: dashed; }
+.app-facts .is-empty dd { color: var(--faint); }
+
+.next-step { margin: 20px 0 0; padding: 18px 20px; border: 1px solid #b8d8d1; border-radius: 16px; background: var(--brand-soft); display: flex; justify-content: space-between; align-items: center; gap: 18px; }
+.next-step > div { display: grid; gap: 2px; }
+.next-step strong { font-size: 1rem; }
+.next-step p { margin: 0; color: var(--ink-soft); font-size: .8rem; }
+
+.app-tabs { margin: 26px 0 18px; border-bottom: 1px solid var(--line); display: flex; gap: 4px; overflow-x: auto; }
+.app-tabs button { padding: 11px 14px; border: 0; border-bottom: 2px solid transparent; margin-bottom: -1px; background: none; color: var(--muted); font: inherit; font-size: .84rem; font-weight: 750; white-space: nowrap; cursor: pointer; }
+.app-tabs button:hover { color: var(--ink); }
+.app-tabs button.active { border-bottom-color: var(--brand); color: var(--ink); }
+
+.app-panel { display: grid; gap: 16px; }
+.app-panel .report-toolbar { margin-bottom: 0; align-items: center; }
+.app-panel .report-toolbar > div:first-child { display: grid; gap: 4px; }
+.app-panel.interview-panel { margin-top: 0; }
+.panel-empty { padding: 40px 28px; border: 1px dashed var(--line-strong); border-radius: 18px; text-align: center; display: grid; justify-items: center; gap: 10px; }
+.panel-empty h2 { margin: 0; }
+.panel-empty p { margin: 0 0 6px; max-width: 520px; color: var(--muted); font-size: .86rem; line-height: 1.55; }
+.panel-intro h2 { margin: 0 0 4px; }
+.panel-intro p { margin: 0; color: var(--muted); font-size: .84rem; }
+.answers-panel .answers-list { max-height: none; }
+.answers-panel .answer-editor { padding: 18px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); margin-top: 6px; }
+.answers-panel .answer-editor legend { padding: 0 6px; }
+
+.details-form { padding: 22px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); display: grid; gap: 14px; }
+.details-form label { display: grid; gap: 6px; font-size: .78rem; font-weight: 700; }
+.details-form input:not([type="file"]), .details-form select, .details-form textarea { width: 100%; padding: 9px 11px; border: 1px solid var(--line-strong); border-radius: 10px; font: inherit; font-size: .84rem; background: var(--surface); }
+.details-form .panel-actions { display: flex; justify-content: space-between; gap: 12px; }
+.form-ok { margin: 0; color: var(--success); font-size: .78rem; font-weight: 700; }
+.form-ok:empty { display: none; }
+
+@media (max-width: 760px) {
+  .app-shell { width: calc(100% - 28px); padding-top: 18px; }
+  .app-head { grid-template-columns: 44px 1fr; }
+  .app-mark { width: 44px; height: 44px; }
+  .app-status { grid-column: 1 / -1; }
+  .next-step { flex-direction: column; align-items: stretch; }
+}
+
+[hidden] { display: none !important; }

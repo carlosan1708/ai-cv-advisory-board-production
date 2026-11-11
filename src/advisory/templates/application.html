@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Application | AI CV Advisory Board</title>
+  <meta name="description" content="Everything about one application: the board report, a stronger CV, your answers, and interview practice.">
+  <link rel="stylesheet" href="/static/app.css?v=13"><link rel="stylesheet" href="/static/tracker.css?v=14"><link rel="stylesheet" href="/static/review.css?v=5"><link rel="stylesheet" href="/static/practice.css?v=2"><link rel="stylesheet" href="/static/application.css?v=1">
+  {% if auth_mode == "google" %}<script src="https://accounts.google.com/gsi/client" async defer></script>{% endif %}
+</head>
+<body class="tracker-page application-page">
+  {% if auth_mode == "google" %}
+  <section class="auth-gate" data-auth-gate data-client-id="{{ google_oauth_client_id }}"><div class="auth-panel"><a class="auth-back" href="/">&larr; Choose another mode</a><div class="auth-brand"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span><span class="overline">Private workspace</span></div><h1>Open this application.</h1><p>Sign in with an approved Google account to see its report, answers, and practice.</p><div class="auth-signin" data-google-signin></div><div class="access-state" data-access-state hidden><strong data-access-title></strong><p data-access-copy></p><button class="button button-primary" type="button" data-request-access>Request access</button></div><small data-auth-error role="alert"></small></div></section>
+  {% endif %}
+  <header class="tracker-header workspace-header-nav">
+    <a class="brand" href="/dashboard"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span><span class="brand-copy"><strong>AI CV</strong><small>Career workspace</small></span></a>
+    <nav aria-label="Workspace navigation"><a class="active" href="/dashboard">Dashboard</a><a href="/review">Guided review</a><a href="/practice">Practice</a><a href="/cvs">CV Library</a><a href="/dashboard#history">History</a><a href="/admin" data-admin-link hidden>Access</a></nav>
+    <a class="button button-secondary button-small" href="/dashboard">Back to dashboard</a>
+  </header>
+
+  <main class="app-shell" data-application-id="{{ application_id }}">
+    <a class="text-action app-back" href="/dashboard">&larr; All applications</a>
+    <p class="workspace-loading" data-loading-workspace>Loading the application&hellip;</p>
+
+    <div data-app hidden>
+      <section class="app-head">
+        <span class="company-mark app-mark" data-app-mark aria-hidden="true"></span>
+        <div class="app-title">
+          <h1 data-app-role data-testid="app-role"></h1>
+          <p data-app-company></p>
+        </div>
+        <label class="app-status">Status
+          <select data-app-status data-testid="app-status">
+            <option value="interested">Interested</option><option value="applied">Applied</option>
+            <option value="interviewing">Interviewing</option><option value="offer">Offer</option><option value="closed">Closed</option>
+          </select>
+        </label>
+      </section>
+      <dl class="app-facts" data-app-facts></dl>
+
+      <section class="next-step" data-next-step hidden>
+        <div><span class="overline">Next step</span><strong data-next-title></strong><p data-next-hint></p></div>
+        <a class="button button-primary" data-next-action data-testid="next-action"></a>
+      </section>
+
+      <nav class="app-tabs" role="tablist" aria-label="Application sections">
+        <button type="button" role="tab" data-tab="report">Report</button>
+        <button type="button" role="tab" data-tab="improve">Improve CV</button>
+        <button type="button" role="tab" data-tab="answers">Answers</button>
+        <button type="button" role="tab" data-tab="practice">Practice</button>
+        <button type="button" role="tab" data-tab="details">Details</button>
+      </nav>
+
+      <!-- Report -->
+      <section class="app-panel" data-panel="report" role="tabpanel" hidden>
+        <div class="panel-empty" data-report-empty hidden>
+          <h2>No board review yet.</h2>
+          <p data-report-empty-copy>The board compares your CV with this posting and saves the report here.</p>
+          <a class="button button-primary" data-run-review data-testid="report-run-review">Get board review</a>
+        </div>
+        <div data-report hidden>
+          <div class="report-toolbar"><div><span class="overline">Saved report</span><small data-report-meta></small></div><div class="report-toolbar-actions"><a class="button button-secondary button-small" data-run-review>Review again</a></div></div>
+          <div data-report-body></div>
+        </div>
+      </section>
+
+      <!-- Improve CV -->
+      <section class="app-panel interview-panel" data-panel="improve" role="tabpanel" hidden data-interview>
+        <div class="interview-heading"><div><span class="overline">Improve this CV</span><h2>Answer a few questions. Get a stronger CV.</h2><p data-interview-intro>The AI asks about real work your CV doesn't show yet, then drafts a revised CV using only your CV and your answers. You edit the draft before anything is saved, and your original version is never changed.</p></div><button class="button button-primary" type="button" data-start-interview data-testid="start-interview">Start the interview</button></div>
+        <p class="interview-notice" data-interview-notice hidden></p>
+        <form class="interview-form" data-interview-form hidden>
+          <div data-questions></div>
+          <p class="form-error" data-interview-error role="alert"></p>
+          <div class="panel-actions"><span class="hint">Skip any question you can't answer truthfully. Your answers are saved on this application.</span><button class="button button-primary" type="submit" data-write-draft data-testid="write-draft">Write my revised CV</button></div>
+        </form>
+        <div class="draft-panel" data-draft hidden>
+          <h3>What changed</h3>
+          <ul class="draft-changes" data-draft-changes></ul>
+          <label>Revised CV <span class="optional-label">Check every line. Edit anything that isn't exactly true.</span><textarea rows="22" maxlength="30000" data-draft-text data-testid="draft-text"></textarea></label>
+          <div class="field-grid two-columns">
+            <label>New version label <input maxlength="100" data-draft-label></label>
+            <label class="confirm-check attach-check"><input type="checkbox" checked data-draft-attach><span>Use this version for this application</span></label>
+          </div>
+          <p class="form-error" data-draft-error role="alert"></p>
+          <div class="panel-actions"><button class="button button-secondary" type="button" data-print-draft>Print / save as PDF</button><button class="button button-primary" type="button" data-save-draft data-testid="save-draft">Save as new CV version</button></div>
+        </div>
+        <div class="draft-saved" data-draft-saved hidden role="status">
+          <strong>Saved to your CV library.</strong>
+          <p data-draft-saved-copy></p>
+          <div class="panel-actions"><a class="button button-secondary button-small" data-draft-download>Download</a><a class="button button-secondary button-small" href="/cvs">Open CV library</a><a class="button button-primary button-small" data-run-review>Review the new version</a></div>
+        </div>
+      </section>
+
+      <!-- Answers -->
+      <section class="app-panel answers-panel" data-panel="answers" role="tabpanel" hidden>
+        <div class="panel-intro"><h2>Answers I've given</h2><p>Keep what you answered on forms, to recruiters, and in interviews, so you stay consistent and can reuse good answers.</p></div>
+        <input type="search" class="answers-search" placeholder="Search questions and answers" aria-label="Search answers" data-answers-search>
+        <div class="answers-list" data-answers-list></div>
+        <p class="answers-empty" data-answers-empty hidden>No answers saved yet. Add the first one below.</p>
+        <fieldset class="answer-editor">
+          <legend data-answer-editor-title>Add an answer</legend>
+          <input type="hidden" data-answer-id>
+          <div class="field-grid two-columns">
+            <label>Where <select data-answer-source>
+              <option value="application_form">Application form</option>
+              <option value="recruiter">Recruiter call</option>
+              <option value="interview">Interview</option>
+              <option value="cv_interview">CV interview</option>
+              <option value="other">Other</option>
+            </select></label>
+            <label>Question <input maxlength="300" placeholder="e.g. What are your salary expectations?" data-answer-question data-testid="answer-question"></label>
+          </div>
+          <label>My answer <textarea rows="5" maxlength="5000" placeholder="What you said or wrote" data-answer-text data-testid="answer-text"></textarea></label>
+          <p class="form-error" data-answers-error role="alert"></p>
+          <div class="panel-actions"><button class="button button-secondary" type="button" data-answer-cancel-edit hidden>Cancel edit</button><button class="button button-primary" type="button" data-answer-save data-testid="answer-save">Save answer</button></div>
+        </fieldset>
+      </section>
+
+      <!-- Practice -->
+      <section class="app-panel" data-panel="practice" role="tabpanel" hidden>
+        {% include "_practice_deck.html" %}
+      </section>
+
+      <!-- Details -->
+      <section class="app-panel" data-panel="details" role="tabpanel" hidden>
+        <form class="details-form" data-details-form>
+          <div class="field-grid two-columns">
+            <label>Company <input name="company" maxlength="120" required autocomplete="organization"></label>
+            <label>Role <input name="role" maxlength="160" required></label>
+          </div>
+          <div class="field-grid two-columns">
+            <label>CV version <select name="cv_version_id" data-details-cv data-testid="details-cv"><option value="">Not attached yet</option></select></label>
+            <label>Public job link <input name="job_url" type="url" placeholder="https://company.com/jobs/..."></label>
+          </div>
+          <div class="job-file-field">
+            <label>Job description file <span class="optional-label">PDF or TXT, for postings without a public link</span>
+              <input name="job_file" type="file" accept=".pdf,.txt,application/pdf,text/plain" data-testid="details-job-file"></label>
+            <div class="job-file-current" data-job-file-current hidden>
+              <span>Saved &middot; <strong data-job-file-name></strong></span>
+              <button class="text-action as-button" type="button" data-remove-job-file>Remove</button>
+            </div>
+          </div>
+          <div class="field-grid two-columns">
+            <label>Applied on <input name="applied_date" type="date"></label>
+            <label>Next action due <input name="next_action_due" type="date"></label>
+          </div>
+          <label>Next action <input name="next_action" maxlength="500" placeholder="Follow up with recruiter"></label>
+          <label>Notes <textarea name="notes" maxlength="10000" rows="4"></textarea></label>
+          <p class="form-error" data-details-error role="alert"></p>
+          <p class="form-ok" data-details-ok role="status"></p>
+          <div class="panel-actions"><button class="button button-secondary danger-action" type="button" data-delete-application>Remove application</button><button class="button button-primary" type="submit" data-testid="details-save">Save changes</button></div>
+        </form>
+      </section>
+    </div>
+  </main>
+  <nav class="mobile-workspace-nav" aria-label="Mobile workspace navigation"><a class="active" href="/dashboard">Dashboard</a><a href="/review">Review</a><a href="/practice">Practice</a><a href="/cvs">CVs</a></nav>
+  <script type="application/json" id="advisors-data">{{ advisors_data | tojson }}</script>
+  <script src="/static/report.js?v=1" defer></script>
+  <script src="/static/practice-deck.js?v=1" defer></script>
+  <script src="/static/application.js?v=1" defer></script>
+</body>
+</html>
