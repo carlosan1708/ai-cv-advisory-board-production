@@ -4,7 +4,7 @@
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Guided review | AI CV Advisory Board</title>
   <meta name="description" content="Review a saved CV against an application with your advisory board, then improve it with a short interview.">
-  <link rel="stylesheet" href="/static/app.css?v=13"><link rel="stylesheet" href="/static/tracker.css?v=13"><link rel="stylesheet" href="/static/review.css?v=3">
+  <link rel="stylesheet" href="/static/app.css?v=13"><link rel="stylesheet" href="/static/tracker.css?v=13"><link rel="stylesheet" href="/static/review.css?v=4">
   {% if auth_mode == "google" %}<script src="https://accounts.google.com/gsi/client" async defer></script>{% endif %}
 </head>
 <body class="tracker-page guided-review-page">
@@ -48,13 +48,7 @@
     </section>
 
     <section class="review-panel" data-step="2" aria-labelledby="step-job-title">
-      <div class="panel-heading"><span class="stage-label">Step 2 of 3</span><h2 id="step-job-title" tabindex="-1">Which job is this for?</h2><p>Add the posting once &mdash; a link, a PDF, or the text. We fill in the company and role for you, and save the report on the application.</p></div>
-      <fieldset class="review-scope job-mode">
-        <legend>Application</legend>
-        <label><input type="radio" name="job_mode" value="existing" checked data-job-mode><span><strong>An application I'm tracking</strong><small>Pick it from your pipeline</small></span></label>
-        <label><input type="radio" name="job_mode" value="new" data-job-mode><span><strong>A new application</strong><small>Adds it to your pipeline</small></span></label>
-      </fieldset>
-      <div data-existing-fields><label class="stacked-label">Application <select data-application-select><option value="">Choose an application</option></select></label></div>
+      <div class="panel-heading"><span class="stage-label">Step 2 of 3</span><h2 id="step-job-title" tabindex="-1">Which job is this for?</h2><p>Add the posting &mdash; a link, a PDF, or the text. We fill in the company and role, and keep the report in your pipeline.</p></div>
 
       <div class="job-source-card">
         <div class="job-source-heading"><strong>Job posting</strong><span>One is enough</span></div>
@@ -71,10 +65,16 @@
         <p class="preview-status" data-preview-status aria-live="polite"></p>
       </div>
 
-      <div class="field-grid two-columns" data-new-fields hidden>
+      <div class="field-grid two-columns" data-new-fields>
         <label class="stacked-label">Company <input maxlength="120" placeholder="Filled from the posting" data-new-company autocomplete="organization"></label>
         <label class="stacked-label">Role <input maxlength="160" placeholder="Filled from the posting" data-new-role></label>
       </div>
+
+      <label class="stacked-label save-to">Save to <span class="optional-label">optional</span>
+        <select data-application-select data-testid="guided-application"><option value="">New application from this posting</option></select>
+      </label>
+      <p class="save-to-hint" data-save-to-hint>A new application is added to your pipeline with this report.</p>
+
       <p class="form-error" data-step-error="2" role="alert"></p>
       <div class="panel-actions"><button class="text-action as-button" type="button" data-back="1">&larr; Back to CV</button><button class="button button-primary" type="button" data-next="2">Choose your board <span aria-hidden="true">&rarr;</span></button></div>
     </section>
@@ -144,6 +144,6 @@
   </main>
   <nav class="mobile-workspace-nav" aria-label="Mobile workspace navigation"><a href="/dashboard">Dashboard</a><a class="active" href="/review">Review</a><a href="/cvs">CVs</a></nav>
   <script type="application/json" id="advisors-data">{{ advisors_data | tojson }}</script>
-  <script src="/static/review.js?v=4" defer></script>
+  <script src="/static/review.js?v=5" defer></script>
 </body>
 </html>

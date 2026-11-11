@@ -80,8 +80,8 @@
   });
 
   // ---------- Step 2: Job ----------
-  const jobMode = () => $$("[data-job-mode]").find((input) => input.checked)?.value || "existing";
-  const selectedApplication = () => state.applications.find((app) => app.id === $("[data-application-select]").value);
+  const targetId = () => $("[data-application-select]").value;
+  const selectedApplication = () => state.applications.find((app) => app.id === targetId());
   let activeSource = "link";
   let previewToken = 0;
   const previewStatus = (text, tone = "") => { const node = $("[data-preview-status]"); node.textContent = text; node.dataset.tone = tone; };
@@ -93,33 +93,29 @@
     previewStatus("");
   }
   $$("[data-source-tab]").forEach((tab) => tab.addEventListener("click", () => setSource(tab.dataset.sourceTab)));
+  setSource("link");
 
   function renderApplications(selectedId = "") {
     const select = $("[data-application-select]");
-    select.replaceChildren(new Option(state.applications.length ? "Choose an application" : "No applications yet", ""));
+    select.replaceChildren(new Option("New application from this posting", ""));
     state.applications.forEach((item) => select.add(new Option(`${item.role} — ${item.company}`, item.id)));
-    select.value = selectedId;
-    if (!state.applications.length) { $$("[data-job-mode]").find((input) => input.value === "new").checked = true; }
-    updateJobMode();
+    select.value = state.applications.some((item) => item.id === selectedId) ? selectedId : "";
+    updateTarget();
   }
-  function describeSavedJob() {
-    const item = jobMode() === "existing" ? selectedApplication() : null;
+  function updateTarget() {
+    const item = selectedApplication();
+    $("[data-new-fields]").hidden = Boolean(item);
+    $("[data-save-to-hint]").textContent = item
+      ? `The report is saved on ${item.role} at ${item.company}.`
+      : "A new application is added to your pipeline with this report.";
     const parts = [];
     if (item?.job_description_filename) parts.push(`Job description: ${item.job_description_filename}`);
     if (item?.job_url) parts.push(`Link: ${item.job_url}`);
-    const savedTab = $('[data-source-tab="saved"]');
-    savedTab.hidden = parts.length === 0;
+    $('[data-source-tab="saved"]').hidden = parts.length === 0;
     $("[data-job-saved]").textContent = parts.length ? `${parts.join(" · ")}. Nothing else needed — or pick another source to replace it.` : "";
     if (parts.length) setSource("saved"); else if (activeSource === "saved") setSource("link");
   }
-  function updateJobMode() {
-    const mode = jobMode();
-    $("[data-existing-fields]").hidden = mode !== "existing";
-    $("[data-new-fields]").hidden = mode !== "new";
-    describeSavedJob();
-  }
-  $$("[data-job-mode]").forEach((input) => input.addEventListener("change", updateJobMode));
-  $("[data-application-select]").addEventListener("change", describeSavedJob);
+  $("[data-application-select]").addEventListener("change", updateTarget);
 
   function fillIdentity(result) {
     [["[data-new-company]", result.company], ["[data-new-role]", result.role]].forEach(([selector, value]) => {
@@ -149,7 +145,7 @@
       if (token !== previewToken) return null;
       fillIdentity(result);
       const found = [result.role, result.company].filter(Boolean).join(" at ");
-      previewStatus(found ? `Posting read: ${found}.` : "Posting read. Add the company and role below.", "ok");
+      previewStatus(found ? `Posting read: ${found}.` : "Posting read.", "ok");
       return result;
     } catch (error) {
       if (token !== previewToken) return null;
@@ -162,42 +158,56 @@
   $("[data-job-file]").addEventListener("change", previewJob);
   $("[data-job-text]").addEventListener("blur", previewJob);
 
+  async function resolveTarget() {
+    const id = targetId();
+    if (!id) return null;
+    let item = selectedApplication();
+    if (!item) {
+      // The list on this page may be out of date (e.g. edited in another tab): reload before giving up.
+      state.applications = await api("/api/applications");
+      item = selectedApplication();
+      if (!item) { renderApplications(""); throw new Error("That application no longer exists. A new one will be created instead — press continue again."); }
+    }
+    return item;
+  }
+
   $('[data-next="2"]').addEventListener("click", async (event) => {
     setError(2, "");
-    const mode = jobMode();
     const jobUrl = activeSource === "link" ? $("[data-job-url]").value.trim() : "";
     const jobFile = activeSource === "file" ? $("[data-job-file]").files?.[0] : null;
     state.jobText = activeSource === "text" ? $("[data-job-text]").value.trim() : "";
     if (jobUrl) { try { if (new URL(jobUrl).protocol !== "https:") throw new Error(); } catch (_) { setError(2, "Enter a complete HTTPS job link, such as https://company.com/jobs/role."); return; } }
-    const hasNewSource = Boolean(jobUrl || jobFile || state.jobText);
-    if (activeSource !== "saved" && !hasNewSource) {
+    if (activeSource !== "saved" && !(jobUrl || jobFile || state.jobText)) {
       setError(2, activeSource === "link" ? "Add the job link, or choose PDF or Paste text." : activeSource === "file" ? "Choose the posting file." : "Paste the job description.");
       return;
     }
     try {
       await withBusy(event.currentTarget, "Saving…", async () => {
+        const target = await resolveTarget();
         let application;
-        if (mode === "new") {
+        if (!target) {
           let company = $("[data-new-company]").value.trim(); let role = $("[data-new-role]").value.trim();
-          if (!company || !role) { const result = await previewJob(); if (result && !result.failed) { company = $("[data-new-company]").value.trim(); role = $("[data-new-role]").value.trim(); } }
-          if (!company || !role) throw new Error("We couldn't read the company and role from the posting. Please type them in.");
-          application = await api("/api/applications", { method: "POST", ...jsonBody({ company, role, cv_version_id: state.cvId, job_url: jobUrl }) });
+          if (!company || !role) { await previewJob(); company = $("[data-new-company]").value.trim(); role = $("[data-new-role]").value.trim(); }
+          application = await api("/api/applications", { method: "POST", ...jsonBody({
+            company: company || "Unknown company",
+            role: role || (jobFile ? jobFile.name.replace(/\.[^.]+$/, "") : "Untitled role"),
+            cv_version_id: state.cvId,
+            job_url: jobUrl,
+          }) });
           state.applications.unshift(application);
         } else {
-          const current = selectedApplication();
-          if (!current) throw new Error("Choose an application, or switch to a new one.");
-          application = await api(`/api/applications/${current.id}`, { method: "PATCH", ...jsonBody({ cv_version_id: state.cvId, ...(jobUrl ? { job_url: jobUrl } : {}) }) });
+          application = await api(`/api/applications/${target.id}`, { method: "PATCH", ...jsonBody({ cv_version_id: state.cvId, ...(jobUrl ? { job_url: jobUrl } : {}) }) });
         }
         if (jobFile) {
           const body = new FormData(); body.append("job_file", jobFile);
           application = await api(`/api/applications/${application.id}/job-description`, { method: "POST", body });
           $("[data-job-file]").value = "";
         } else if (jobUrl && application.job_description_filename) {
-          // A new link replaces an older saved description, so the review reads the link.
           application = await api(`/api/applications/${application.id}/job-description`, { method: "DELETE" });
         }
         state.application = application;
         state.applications = state.applications.map((item) => (item.id === application.id ? application : item));
+        renderApplications(application.id);
       });
       showStep(3);
     } catch (error) { setError(2, error.message); }
@@ -337,7 +347,7 @@
     showStep(4);
   }
   $("[data-new-review]").addEventListener("click", () => {
-    if (state.application) { $$("[data-job-mode]").find((input) => input.value === "existing").checked = true; updateJobMode(); renderApplications(state.application.id); }
+    if (state.application) renderApplications(state.application.id);
     renderCvOptions(); showStep(1);
   });
 
@@ -417,7 +427,7 @@
   $("[data-review-new-version]").addEventListener("click", () => {
     if (!state.newVersion) return;
     state.cvId = state.newVersion.id; renderCvOptions();
-    if (state.application) { $$("[data-job-mode]").find((input) => input.value === "existing").checked = true; updateJobMode(); renderApplications(state.application.id); }
+    if (state.application) renderApplications(state.application.id);
     showStep(3);
   });
   $("[data-print-draft]").addEventListener("click", () => {
@@ -436,7 +446,7 @@
     const [cvs, applications] = await Promise.all([api("/api/cv-versions"), api("/api/applications")]);
     state.cvs = cvs; state.applications = applications;
     state.cvId = state.cvId || cvs[0]?.id || "";
-    renderCvOptions(); renderApplications(); updateJobMode(); renderAdvisors();
+    renderCvOptions(); renderApplications(); renderAdvisors();
     $("[data-loading-workspace]").hidden = true;
     const requested = new URLSearchParams(location.search).get("application");
     if (requested) {

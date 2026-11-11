@@ -409,7 +409,6 @@ def test_guided_review_saves_report_and_interview_creates_new_version(page: Page
         files=[{"name": "guided.txt", "mimeType": "text/plain", "buffer": cv_bytes}]
     )
     page.get_by_role("button", name="Continue to job").click()
-    page.get_by_text("A new application").click()
     page.locator("[data-new-company]").fill(f"Globex {suffix}")
     page.locator("[data-new-role]").fill("Platform Engineer")
     page.get_by_role("tab", name="Paste text").click()
@@ -472,7 +471,6 @@ def test_guided_review_reads_company_and_role_from_an_uploaded_posting(page: Pag
         files=[{"name": "cv.txt", "mimeType": "text/plain", "buffer": b"EXPERIENCE\n- Built data pipelines."}]
     )
     page.get_by_role("button", name="Continue to job").click()
-    page.get_by_text("A new application").click()
     page.get_by_role("tab", name="PDF or TXT").click()
     posting = f"Senior Data Engineer at {company}\nRequirements: Python, Spark, Airflow.".encode()
     page.get_by_test_id("guided-job-file").set_input_files(
@@ -518,3 +516,33 @@ def test_practice_cards_flip_rate_and_level_up_controls(page: Page) -> None:
     page.get_by_test_id("generate-cards").click()
     page.get_by_role("button", name="Level 3", exact=True).click()
     expect(page.locator("[data-card-level]")).to_have_text("Level 3 · Tough")
+
+
+def test_guided_review_with_an_existing_application_and_a_posting_file(page: Page) -> None:
+    company = f"Thaloz {uuid4().hex[:6]}"
+    cv = page.request.post(
+        f"{BASE_URL}/api/cv-versions",
+        multipart={
+            "label": "Existing-app CV",
+            "cv_file": {"name": "cv.txt", "mimeType": "text/plain", "buffer": b"EXPERIENCE\n- Built apps."},
+        },
+    ).json()
+    application = page.request.post(
+        f"{BASE_URL}/api/applications",
+        data={"company": company, "role": "LLM Data Scientist", "cv_version_id": cv["id"]},
+    ).json()
+    page.goto(f"{BASE_URL}/review")
+    expect(page.locator("[data-loading-workspace]")).to_be_hidden()
+    page.get_by_role("button", name="Continue to job").click()
+    expect(page.get_by_test_id("guided-application")).to_have_value("")
+    expect(page.locator("[data-new-fields]")).to_be_visible()
+    page.get_by_test_id("guided-application").select_option(application["id"])
+    expect(page.locator("[data-new-fields]")).to_be_hidden()
+    page.get_by_role("tab", name="PDF or TXT").click()
+    page.get_by_test_id("guided-job-file").set_input_files(
+        files=[{"name": "JD.txt", "mimeType": "text/plain", "buffer": b"LLM Data Scientist\nPython, LLMs"}]
+    )
+    page.get_by_role("button", name="Choose your board").click()
+    expect(page.locator('[data-step-error="2"]')).to_have_text("")
+    page.get_by_test_id("guided-run-review").click()
+    expect(page.get_by_role("heading", name=f"LLM Data Scientist at {company}")).to_be_visible()
