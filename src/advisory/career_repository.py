@@ -96,7 +96,9 @@ class InMemoryCareerRepository:
             cv_version_id = changes.get("cv_version_id")
             if cv_version_id:
                 self.get_cv_version(owner_id, cv_version_id)
-            updated = current.model_copy(update={**changes, "updated_at": datetime.now(UTC)})
+            updated = Application.model_validate(
+                {**current.model_dump(), **changes, "updated_at": datetime.now(UTC)}
+            )
             self._applications[key] = updated
             return updated.model_copy(deep=True)
 

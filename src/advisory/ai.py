@@ -464,7 +464,13 @@ class OpenAiStructuredClient:
         self.max_output_tokens = max_output_tokens
 
     def complete(
-        self, *, instructions: str, documents: str, schema_name: str, schema: dict[str, object]
+        self,
+        *,
+        instructions: str,
+        documents: str,
+        schema_name: str,
+        schema: dict[str, object],
+        max_output_tokens: int | None = None,
     ) -> tuple[str, int, int]:
         response = self.client.chat.completions.create(
             model=self.model,
@@ -476,7 +482,7 @@ class OpenAiStructuredClient:
                 "type": "json_schema",
                 "json_schema": {"name": schema_name, "strict": True, "schema": schema},
             },
-            max_completion_tokens=self.max_output_tokens,
+            max_completion_tokens=max_output_tokens or self.max_output_tokens,
             reasoning_effort=self.reasoning_effort,
         )
         choice = response.choices[0]

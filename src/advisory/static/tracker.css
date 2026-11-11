@@ -72,3 +72,6 @@
 
 .card-actions { display: inline-flex; gap: 8px; }
 .card-remove-button { padding: 6px 2px; font-size: 0.8rem; color: #b42318; }
+
+.expert-panel-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.card-report-link { padding: 6px 2px; font-size: 0.8rem; font-weight: 700; }

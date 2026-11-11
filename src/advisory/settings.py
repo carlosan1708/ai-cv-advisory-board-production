@@ -40,6 +40,7 @@ class Settings(BaseSettings):
     free_openai_output_micro_usd_per_million: int = Field(default=500_000, ge=1)
     ai_max_input_tokens: int = Field(default=65_000, ge=1_000, le=400_000)
     ai_max_output_tokens: int = Field(default=6_000, ge=1_000, le=32_000)
+    ai_max_draft_output_tokens: int = Field(default=12_000, ge=2_000, le=32_000)
     ai_monthly_limit_micro_usd: int = Field(default=5_000_000, ge=100_000, le=100_000_000)
     member_ai_monthly_limit_micro_usd: int = Field(
         default=10_000_000, ge=100_000, le=100_000_000

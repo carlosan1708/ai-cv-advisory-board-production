@@ -51,6 +51,10 @@
     const editButton = card.querySelector(".card-edit-button");
     editButton.setAttribute("aria-label", `Edit ${application.role} at ${application.company}`);
     editButton.addEventListener("click", () => openApplicationDialog(application));
+    const reportLink = card.querySelector(".card-report-link");
+    reportLink.hidden = !application.has_board_review;
+    reportLink.href = `/review?application=${encodeURIComponent(application.id)}`;
+    reportLink.setAttribute("aria-label", `Open the saved report for ${application.role} at ${application.company}`);
     const removeButton = card.querySelector(".card-remove-button");
     removeButton.setAttribute("aria-label", `Remove ${application.role} at ${application.company}`);
     removeButton.addEventListener("click", () => removeApplication(application).catch((error) => window.alert(error.message)));

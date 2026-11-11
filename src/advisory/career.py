@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, date, datetime
 from enum import StrEnum
+from typing import Any
 from urllib.parse import urlparse
 from uuid import uuid4
 
@@ -54,6 +55,19 @@ class ApplicationCreate(BaseModel):
         return value.strip()
 
 
+class SavedBoardReview(BaseModel):
+    """The latest guided board review for an application, kept so it can be reopened."""
+
+    created_at: datetime
+    model: str = Field(default="", max_length=80)
+    degraded: bool = False
+    notice: str = Field(default="", max_length=400)
+    cv_version_id: str = Field(max_length=64)
+    advisor_ids: list[str] = Field(default_factory=list, max_length=3)
+    review: dict[str, Any]
+    assessment: dict[str, Any]
+
+
 class ApplicationUpdate(BaseModel):
     company: str | None = Field(default=None, min_length=1, max_length=120)
     role: str | None = Field(default=None, min_length=1, max_length=160)
@@ -70,6 +84,7 @@ class ApplicationUpdate(BaseModel):
     ai_summary: str | None = Field(default=None, max_length=700)
     job_description: str | None = Field(default=None, max_length=30_000)
     job_description_filename: str | None = Field(default=None, max_length=200)
+    board_review: SavedBoardReview | None = None
 
     @field_validator("company", "role")
     @classmethod
@@ -99,6 +114,7 @@ class Application(ApplicationCreate):
     ai_summary: str = ""
     job_description: str = Field(default="", max_length=30_000)
     job_description_filename: str = Field(default="", max_length=200)
+    board_review: SavedBoardReview | None = None
     archive_id: str | None = None
     created_at: datetime
     updated_at: datetime

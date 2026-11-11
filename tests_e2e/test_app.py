@@ -1,5 +1,6 @@
 import json
 import os
+import re
 from pathlib import Path
 from uuid import uuid4
 
@@ -89,7 +90,7 @@ def test_cv_library_reviews_and_saves_a_new_version(page: Page, tmp_path: Path) 
     page.get_by_role("button", name="Save new version").click()
     expect(page.get_by_role("heading", name=f"{label} revised")).to_be_visible()
     page.goto(f"{BASE_URL}/dashboard")
-    page.get_by_role("button", name="Start an AI expert review").click()
+    page.get_by_role("button", name="Quick CV check").click()
     panel = page.locator("[data-expert-dialog]")
     expect(panel.locator("[data-expert-application-fields]")).to_be_hidden()
     panel.get_by_label("CV version").select_option(label=f"{label} revised")
@@ -394,3 +395,37 @@ def test_primary_flows_have_clean_browser_console(page: Page, tmp_path: Path) ->
     page.get_by_test_id("analyze-button").click()
     expect(page.get_by_test_id("results")).to_be_visible()
     assert messages == []
+
+
+def test_guided_review_saves_report_and_interview_creates_new_version(page: Page) -> None:
+    suffix = uuid4().hex[:6]
+    page.goto(f"{BASE_URL}/review")
+    expect(page.get_by_role("heading", name="Which CV should the board review?")).to_be_visible()
+    expect(page.locator("[data-loading-workspace]")).to_be_hidden()
+    page.locator("[data-cv-upload-panel]").evaluate("panel => { panel.open = true; }")
+    page.locator("[data-cv-label]").fill(f"Guided CV {suffix}")
+    cv_bytes = b"EXPERIENCE\n- Built Python services on Google Cloud.\nSKILLS\nPython\nEDUCATION\nBSc"
+    page.get_by_test_id("guided-cv-file").set_input_files(
+        files=[{"name": "guided.txt", "mimeType": "text/plain", "buffer": cv_bytes}]
+    )
+    page.get_by_role("button", name="Continue to job").click()
+    page.get_by_text("A new application").click()
+    page.locator("[data-new-company]").fill(f"Globex {suffix}")
+    page.locator("[data-new-role]").fill("Platform Engineer")
+    page.get_by_text("Or paste the job description").click()
+    page.locator("[data-job-text]").fill("Platform Engineer: Python, Kubernetes, Terraform.")
+    page.get_by_role("button", name="Choose your board").click()
+    page.get_by_test_id("guided-run-review").click()
+    expect(page.get_by_role("heading", name=f"Platform Engineer at Globex {suffix}")).to_be_visible()
+    expect(page.locator(".advisor-verdict")).to_have_count(3)
+
+    page.get_by_test_id("start-interview").click()
+    page.locator('[data-answer-index="0"]').fill("Ran 8 services on GKE.")
+    page.get_by_test_id("write-draft").click()
+    expect(page.get_by_test_id("draft-text")).to_have_value(re.compile("Ran 8 services on GKE."))
+    page.get_by_test_id("save-draft").click()
+    expect(page.get_by_text("Saved to your CV library.")).to_be_visible()
+
+    page.goto(f"{BASE_URL}/dashboard")
+    card = page.locator(".application-card", has_text=f"Globex {suffix}")
+    expect(card.get_by_role("link", name=re.compile("Open the saved report"))).to_be_visible()

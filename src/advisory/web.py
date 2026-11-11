@@ -3,16 +3,17 @@ from __future__ import annotations
 import hashlib
 import json
 from collections.abc import Awaitable, Callable
+from dataclasses import asdict
 from datetime import UTC, datetime
 from functools import lru_cache
 from pathlib import Path
-from typing import Protocol, cast
+from typing import Any, Protocol, cast
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 
 from advisory.access import (
@@ -48,12 +49,13 @@ from advisory.ai import (
 from advisory.ai_audit import (
     AiAuditEvent,
     AiAuditRepository,
+    AuditReviewType,
     AuditStatus,
     InMemoryAiAuditRepository,
 )
 from advisory.auth import IdentityVerifier, UserIdentity
 from advisory.budget import BudgetExceededError, BudgetLedger, InMemoryBudgetLedger, Pricing
-from advisory.career import ApplicationCreate, ApplicationUpdate
+from advisory.career import Application, ApplicationCreate, ApplicationUpdate, SavedBoardReview
 from advisory.career_repository import (
     CareerRepository,
     EmptyWorkspaceError,
@@ -72,6 +74,14 @@ from advisory.ingestion import (
     CvDocumentParser,
     JobDescriptionError,
     JobDescriptionFetcher,
+)
+from advisory.interview import (
+    MAX_QUESTIONS,
+    CvInterviewer,
+    DeterministicCvInterviewer,
+    InterviewAnswer,
+    OpenAiCvInterviewer,
+    run_budgeted,
 )
 from advisory.observability import emit
 from advisory.rate_limit import RateLimitExceededError, SlidingWindowRateLimiter
@@ -201,7 +211,13 @@ def job_document_parser() -> CvDocumentParser:
     )
 
 
-APPLICATION_LIST_EXCLUDE = {"job_description"}
+APPLICATION_LIST_EXCLUDE = {"job_description", "board_review"}
+
+
+def application_payload(item: Application) -> dict[str, object]:
+    payload = item.model_dump(mode="json", exclude=APPLICATION_LIST_EXCLUDE)
+    payload["has_board_review"] = item.board_review is not None
+    return payload
 
 
 def job_description_fetcher() -> JobDescriptionFetcher:
@@ -609,7 +625,7 @@ def decide_workspace_access(request: Request, record_id: str, payload: AccessDec
 @app.get("/api/applications")
 def list_applications(request: Request) -> list[dict[str, object]]:
     return [
-        item.model_dump(mode="json", exclude=APPLICATION_LIST_EXCLUDE)
+        application_payload(item)
         for item in career_repository.list_applications(owner_id(request))
     ]
 
@@ -621,7 +637,7 @@ def create_application(request: Request, payload: ApplicationCreate) -> dict[str
     except NotFoundError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     emit("application.created", user_id=owner_id(request), application_id=item.id, status=item.status)
-    return item.model_dump(mode="json", exclude=APPLICATION_LIST_EXCLUDE)
+    return application_payload(item)
 
 
 @app.patch("/api/applications/{application_id}")
@@ -633,7 +649,7 @@ def update_application(
     except NotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     emit("application.updated", user_id=owner_id(request), application_id=item.id, status=item.status)
-    return item.model_dump(mode="json", exclude=APPLICATION_LIST_EXCLUDE)
+    return application_payload(item)
 
 
 @app.post("/api/applications/{application_id}/job-description")
@@ -659,7 +675,7 @@ async def upload_job_description(
         emit("job.ingestion.failed", source="upload", file_bytes=len(payload), error_type=type(exc).__name__)
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     emit("job.ingestion.completed", source="upload", file_bytes=len(payload), job_chars=len(text))
-    return item.model_dump(mode="json", exclude=APPLICATION_LIST_EXCLUDE)
+    return application_payload(item)
 
 
 @app.delete("/api/applications/{application_id}/job-description")
@@ -673,7 +689,7 @@ def remove_job_description(request: Request, application_id: str) -> dict[str, o
         )
     except NotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
-    return item.model_dump(mode="json", exclude=APPLICATION_LIST_EXCLUDE)
+    return application_payload(item)
 
 
 @app.delete("/api/applications/{application_id}", status_code=204)
@@ -721,7 +737,7 @@ def get_workspace_archive(request: Request, archive_id: str) -> dict[str, object
     return {
         "archive": detail.archive.model_dump(mode="json"),
         "applications": [
-            item.model_dump(mode="json", exclude=APPLICATION_LIST_EXCLUDE) for item in detail.applications
+            application_payload(item) for item in detail.applications
         ],
         "cv_versions": [
             item.model_dump(mode="json", exclude={"extracted_text"})
@@ -997,6 +1013,259 @@ async def application_ai_review(
 @app.get("/workspace", response_class=HTMLResponse)
 def workspace(request: Request) -> HTMLResponse:
     return render(request)
+
+
+@app.get("/review", response_class=HTMLResponse)
+def guided_review_page(request: Request) -> HTMLResponse:
+    return templates.TemplateResponse(
+        request=request,
+        name="review.html",
+        context={
+            "auth_mode": settings.auth_mode,
+            "google_oauth_client_id": settings.google_oauth_client_id,
+            "advisors": ADVISORS,
+            "default_advisor_ids": list(DEFAULT_ADVISOR_IDS),
+            "advisors_data": [asdict(advisor) for advisor in ADVISORS],
+        },
+    )
+
+
+def cv_interviewer() -> CvInterviewer:
+    if settings.environment == "production":
+        return OpenAiCvInterviewer(
+            openai_client(settings.openai_model),
+            draft_output_tokens=settings.ai_max_draft_output_tokens,
+        )
+    return DeterministicCvInterviewer()
+
+
+def _audit_member(
+    review_type: AuditReviewType, owner: str, status: AuditStatus, usage: AiUsage | None
+) -> None:
+    _record_ai_audit(
+        AiAuditEvent.new(
+            owner_id=owner,
+            access_tier="approved",
+            review_type=review_type,
+            status=status,
+            model=usage.model if usage else settings.openai_model,
+            input_tokens=usage.input_tokens if usage else 0,
+            output_tokens=usage.output_tokens if usage else 0,
+            actual_micro_usd=usage.actual_micro_usd if usage else 0,
+            duration_ms=usage.duration_ms if usage else 0,
+        )
+    )
+
+
+FALLBACK_NOTICES = {
+    "budget_limited": "Your monthly AI allowance is used up, so this was prepared without an AI model.",
+    "rate_limited": "Too many AI requests in the last minute, so this was prepared without an AI model. "
+    "Try again shortly for the AI version.",
+    "fallback": "The AI model is temporarily unavailable, so this was prepared without it.",
+}
+
+
+async def _member_ai(
+    owner: str,
+    review_type: AuditReviewType,
+    max_output_tokens: int,
+    call: Callable[[], tuple[Any, int, int]],
+    fallback: Callable[[], tuple[Any, int, int]],
+) -> tuple[Any, str]:
+    """Run a budgeted member AI call; on any limit or provider failure use the rule-based fallback."""
+    status: AuditStatus = "ai"
+    usage: AiUsage | None = None
+    try:
+        _enforce_ai_rate(owner, settings.member_ai_requests_per_minute, "approved")
+        result, usage = await run_in_threadpool(
+            run_budgeted,
+            ledger=member_budget_ledger,
+            owner_id=owner,
+            pricing=ai_pricing(),
+            max_input_tokens=settings.ai_max_input_tokens,
+            max_output_tokens=max_output_tokens,
+            call=call,
+            event=f"ai.{review_type}",
+            emergency_ledger=project_budget_ledger,
+            emergency_owner_id=PROJECT_BUDGET_OWNER,
+        )
+    except BudgetExceededError:
+        status = "budget_limited"
+    except RateLimitExceededError:
+        status = "rate_limited"
+    except Exception as exc:
+        status = "fallback"
+        emit("ai.member.fallback", review_type=review_type, error_type=type(exc).__name__)
+    _audit_member(review_type, owner, status, usage)
+    if status != "ai":
+        result, _, _ = fallback()
+        return result, FALLBACK_NOTICES[status]
+    return result, ""
+
+
+@app.post("/api/applications/{application_id}/board-review")
+async def application_board_review(
+    request: Request,
+    application_id: str,
+    advisor_ids: str = Form(""),
+    job_text: str = Form(""),
+) -> dict[str, object]:
+    owner = owner_id(request)
+    selected = normalize_advisor_ids(advisor_ids.split(","))
+    if not selected:
+        raise HTTPException(status_code=422, detail="Choose at least one specialist for your board.")
+    try:
+        application = career_repository.get_application(owner, application_id)
+        if not application.cv_version_id:
+            raise HTTPException(status_code=422, detail="Choose a CV for this application first.")
+        version = career_repository.get_cv_version(owner, application.cv_version_id)
+    except NotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    pasted = job_text.strip()
+    resolved_job = pasted or application.job_description.strip()
+    if not resolved_job and application.job_url:
+        try:
+            resolved_job = await run_in_threadpool(job_description_fetcher().fetch, application.job_url)
+        except JobDescriptionError as exc:
+            raise HTTPException(
+                status_code=422,
+                detail=f"{exc} Upload the posting as a PDF or paste the description instead.",
+            ) from exc
+    if not resolved_job:
+        raise HTTPException(
+            status_code=422,
+            detail="Add a public job link, upload the job description PDF, or paste the description.",
+        )
+    try:
+        _, assessment = service().analyze(version.extracted_text, resolved_job)
+    except InputError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    status: AuditStatus = "ai"
+    usage: AiUsage | None = None
+    try:
+        _enforce_ai_rate(owner, settings.member_ai_requests_per_minute, "approved")
+        review, usage = await run_in_threadpool(
+            _board_review_with_usage,
+            member_ai_service(),
+            owner,
+            version.extracted_text,
+            resolved_job,
+            selected,
+        )
+    except BudgetExceededError:
+        status = "budget_limited"
+    except RateLimitExceededError:
+        status = "rate_limited"
+    except Exception as exc:
+        status = "fallback"
+        emit("ai.member.fallback", review_type="application", error_type=type(exc).__name__)
+    if status != "ai":
+        review, _, _ = DeterministicAiReviewer().review(version.extracted_text, resolved_job, selected)
+    _audit_member("application", owner, status, usage)
+
+    saved = SavedBoardReview(
+        created_at=datetime.now(UTC),
+        model=usage.model if usage else "rule-based",
+        degraded=status != "ai",
+        notice=FALLBACK_NOTICES.get(status, ""),
+        cv_version_id=version.id,
+        advisor_ids=selected,
+        review=review.model_dump(mode="json"),
+        assessment=assessment.model_dump(mode="json"),
+    )
+    update = ApplicationUpdate(board_review=saved, fit_score=review.fit_score, ai_summary=review.summary)
+    if pasted and not application.job_description:
+        update.job_description = pasted[:30_000]
+        update.job_description_filename = "Pasted description"
+    item = career_repository.update_application(owner, application_id, update)
+    emit("application.board_review_saved", user_id=owner, application_id=item.id, degraded=saved.degraded)
+    return {
+        "application": application_payload(item),
+        "board_review": saved.model_dump(mode="json"),
+        "budget": _budget_payload(member_budget_ledger, owner),
+    }
+
+
+@app.get("/api/applications/{application_id}/board-review")
+def get_application_board_review(request: Request, application_id: str) -> dict[str, object]:
+    try:
+        item = career_repository.get_application(owner_id(request), application_id)
+    except NotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    if item.board_review is None:
+        raise HTTPException(status_code=404, detail="No saved report for this application yet.")
+    return {
+        "application": application_payload(item),
+        "board_review": item.board_review.model_dump(mode="json"),
+    }
+
+
+class InterviewDraftRequest(BaseModel):
+    application_id: str | None = Field(default=None, max_length=64)
+    answers: list[InterviewAnswer] = Field(max_length=MAX_QUESTIONS)
+
+
+def _interview_context(owner: str, application_id: str | None) -> str:
+    if not application_id:
+        return ""
+    try:
+        application = career_repository.get_application(owner, application_id)
+    except NotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    if application.job_description.strip():
+        return application.job_description
+    target = f"Target role: {application.role} at {application.company}."
+    if application.board_review is not None:
+        gaps = [str(item) for item in application.board_review.review.get("evidence_gaps", [])]
+        if gaps:
+            return f"{target} Gaps found in the last review: {', '.join(gaps)}."
+    return target
+
+
+def _cv_text(owner: str, cv_version_id: str) -> str:
+    try:
+        return career_repository.get_cv_version(owner, cv_version_id).extracted_text
+    except NotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.post("/api/cv-versions/{cv_version_id}/interview")
+async def cv_interview_questions(
+    request: Request, cv_version_id: str, application_id: str = Form("")
+) -> dict[str, object]:
+    owner = owner_id(request)
+    cv_text = _cv_text(owner, cv_version_id)
+    job_text = _interview_context(owner, application_id or None)
+    interviewer = cv_interviewer()
+    result, notice = await _member_ai(
+        owner,
+        "cv_interview",
+        settings.ai_max_output_tokens,
+        lambda: interviewer.questions(cv_text, job_text),
+        lambda: DeterministicCvInterviewer().questions(cv_text, job_text),
+    )
+    return {"questions": result.model_dump(mode="json")["questions"], "notice": notice}
+
+
+@app.post("/api/cv-versions/{cv_version_id}/interview/draft")
+async def cv_interview_draft(
+    request: Request, cv_version_id: str, payload: InterviewDraftRequest
+) -> dict[str, object]:
+    owner = owner_id(request)
+    if not any(item.answer.strip() for item in payload.answers):
+        raise HTTPException(status_code=422, detail="Answer at least one question first.")
+    cv_text = _cv_text(owner, cv_version_id)
+    job_text = _interview_context(owner, payload.application_id)
+    interviewer = cv_interviewer()
+    result, notice = await _member_ai(
+        owner,
+        "cv_draft",
+        settings.ai_max_draft_output_tokens,
+        lambda: interviewer.draft(cv_text, job_text, payload.answers),
+        lambda: DeterministicCvInterviewer().draft(cv_text, job_text, payload.answers),
+    )
+    return {"draft": result.model_dump(mode="json"), "notice": notice}
 
 
 @app.post("/demo", response_class=HTMLResponse)

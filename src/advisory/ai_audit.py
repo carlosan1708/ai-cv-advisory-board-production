@@ -8,7 +8,7 @@ from uuid import uuid4
 from pydantic import BaseModel, Field
 
 AuditTier = Literal["anonymous", "approved"]
-AuditReviewType = Literal["job_match", "application", "cv"]
+AuditReviewType = Literal["job_match", "application", "cv", "cv_interview", "cv_draft"]
 AuditStatus = Literal[
     "ai",
     "gemini",  # legacy records written before the OpenAI migration
