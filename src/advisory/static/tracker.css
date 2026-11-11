@@ -69,3 +69,6 @@
 .job-file-field input[type="file"] { margin-top: 6px; font-size: 0.85rem; }
 .job-file-current { margin-top: 8px; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 10px; font-size: 0.85rem; }
 .job-file-current strong { word-break: break-all; }
+
+.card-actions { display: inline-flex; gap: 8px; }
+.card-remove-button { padding: 6px 2px; font-size: 0.8rem; color: #b42318; }

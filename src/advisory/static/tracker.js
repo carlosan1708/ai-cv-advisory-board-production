@@ -51,6 +51,9 @@
     const editButton = card.querySelector(".card-edit-button");
     editButton.setAttribute("aria-label", `Edit ${application.role} at ${application.company}`);
     editButton.addEventListener("click", () => openApplicationDialog(application));
+    const removeButton = card.querySelector(".card-remove-button");
+    removeButton.setAttribute("aria-label", `Remove ${application.role} at ${application.company}`);
+    removeButton.addEventListener("click", () => removeApplication(application).catch((error) => window.alert(error.message)));
     const attachment = card.querySelector(".cv-attachment");
     const versionLabel = cvLabel(application.cv_version_id);
     attachment.textContent = versionLabel ? `CV · ${versionLabel}` : "No CV attached";
@@ -306,16 +309,19 @@
     return data;
   }
   document.querySelectorAll("[data-open-application]").forEach((button) => button.addEventListener("click", () => openApplicationDialog()));
+  async function removeApplication(application) {
+    if (!window.confirm(`Remove ${application.role} at ${application.company}? This cannot be undone. Your CV versions are kept.`)) return false;
+    await api(`/api/applications/${application.id}`, { method: "DELETE" });
+    state.applications = state.applications.filter((item) => item.id !== application.id);
+    render();
+    return true;
+  }
   appDialog.querySelector("[data-delete-application]").addEventListener("click", async () => {
-    const form = appDialog.querySelector("[data-application-form]");
-    const id = form.elements.application_id.value;
+    const id = appDialog.querySelector("[data-application-form]").elements.application_id.value;
     const application = state.applications.find((item) => item.id === id);
-    if (!application || !window.confirm(`Delete ${application.role} at ${application.company}? This cannot be undone. Your CV versions are kept.`)) return;
-    try {
-      await api(`/api/applications/${id}`, { method: "DELETE" });
-      state.applications = state.applications.filter((item) => item.id !== id);
-      appDialog.close(); render();
-    } catch (error) { document.querySelector("[data-application-error]").textContent = error.message; }
+    if (!application) return;
+    try { if (await removeApplication(application)) appDialog.close(); }
+    catch (error) { document.querySelector("[data-application-error]").textContent = error.message; }
   });
   document.querySelectorAll("[data-open-cv]").forEach((button) => button.addEventListener("click", () => cvDialog.showModal()));
   document.querySelectorAll("[data-open-expert-panel]").forEach((button) => button.addEventListener("click", () => { populateExpertPanel(); expertDialog.querySelector("[data-expert-result]").hidden = true; expertDialog.querySelector("[data-expert-error]").textContent = ""; expertDialog.showModal(); }));
@@ -402,13 +408,19 @@
     if (event.submitter?.value === "cancel") return;
     event.preventDefault();
     const form = event.currentTarget; const data = new FormData(form); const id = data.get("application_id");
-    const application = state.applications.find((item) => item.id === id);
+    const jobFile = form.elements.job_file.files?.[0];
+    data.delete("job_file");
     const error = document.querySelector("[data-application-review-error]"); error.textContent = "";
+    const button = form.querySelector('button[type="submit"]'); const label = button.textContent; button.disabled = true;
     try {
+      if (jobFile) { button.textContent = "Reading job description…"; await uploadJobFile(id, jobFile); }
+      button.textContent = "Reviewing evidence…";
       const result = await api(`/api/applications/${id}/ai-review`, { method: "POST", body: data });
+      const application = state.applications.find((item) => item.id === id);
       application.fit_score = result.review.fit_score; application.ai_summary = result.review.summary;
       applicationReviewDialog.close(); render();
-    } catch (exc) { error.textContent = exc.message; }
+    } catch (exc) { error.textContent = exc.message; render(); }
+    finally { button.disabled = false; button.textContent = label; }
   });
   document.querySelectorAll('input[name="scope"]').forEach((radio) => radio.addEventListener("change", (event) => { expertDialog.querySelector("[data-expert-application-fields]").hidden = event.target.value !== "application"; expertDialog.querySelector("[data-expert-result]").hidden = true; }));
   document.querySelector("[data-expert-form]").addEventListener("submit", async (event) => {

@@ -6,7 +6,7 @@
   <title>Application pipeline · AI CV Advisory Board</title>
   <meta name="description" content="Track every application, next action, and the exact CV version you sent.">
   <link rel="stylesheet" href="/static/app.css?v=12">
-  <link rel="stylesheet" href="/static/tracker.css?v=9">
+  <link rel="stylesheet" href="/static/tracker.css?v=10">
   {% if auth_mode == "google" %}<script src="https://accounts.google.com/gsi/client" async defer></script>{% endif %}
 </head>
 <body class="tracker-page">
@@ -196,10 +196,11 @@
   <dialog class="tracker-dialog compact-dialog" data-application-review-dialog>
     <form method="dialog" data-application-review-form>
       <div class="dialog-heading"><div><span class="overline">CV-to-job review</span><h2 data-application-review-title>Review attached CV</h2></div><button class="icon-button" value="cancel" aria-label="Close">&times;</button></div>
-      <p class="dialog-lede">We will compare the attached library version with this application. If the public job link is unavailable, paste the description below.</p>
+      <p class="dialog-lede">We will compare the attached library version with this application. If the job link can't be read, upload the posting as a PDF or paste the description below.</p>
       <div class="review-context"><strong data-application-review-cv></strong><span data-application-review-job></span></div>
       <input name="application_id" type="hidden">
-      <label>Job description <span class="optional-label">Optional when a job link or file is saved</span><textarea name="job_text" rows="8" placeholder="Paste the role responsibilities and requirements…"></textarea></label>
+      <label>Job description file <span class="optional-label">PDF or TXT &middot; saved on the application for future reviews</span><input name="job_file" type="file" accept=".pdf,.txt,application/pdf,text/plain" data-testid="review-job-file-input"></label>
+      <label>Or paste the job description <span class="optional-label">Optional when a job link or file is saved</span><textarea name="job_text" rows="6" placeholder="Paste the role responsibilities and requirements…"></textarea></label>
       <p class="form-error" data-application-review-error></p>
       <div class="dialog-actions"><button class="button button-secondary" value="cancel">Cancel</button><button class="button button-primary" type="submit" value="default">Review attached CV</button></div>
     </form>
@@ -229,9 +230,9 @@
       <button class="ai-review-button" type="button" hidden>Review attached CV</button>
       <button class="application-review-button ai-review-button" type="button" hidden>Review attached CV</button>
       <p class="ai-summary"></p>
-      <div class="card-footer"><label class="status-control">Move to<select></select></label><button class="text-action card-edit-button" type="button">Edit</button></div>
+      <div class="card-footer"><label class="status-control">Move to<select></select></label><span class="card-actions"><button class="text-action card-edit-button" type="button">Edit</button><button class="text-action card-remove-button" type="button">Remove</button></span></div>
     </article>
   </template>
-  <script src="/static/tracker.js?v=9" defer></script>
+  <script src="/static/tracker.js?v=10" defer></script>
 </body>
 </html>

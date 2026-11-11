@@ -112,7 +112,7 @@ def test_tracker_add_move_filter_and_funnel_update(page: Page) -> None:
     page.get_by_role("button", name="Add application", exact=True).last.click()
     expect(page.get_by_role("heading", name=role)).to_be_visible()
     expect(page.locator('[data-count="applied"]')).to_have_text(str(applied_before + 1))
-    page.get_by_label(f"Move {role} at Acme").select_option("interviewing")
+    page.get_by_label(f"Move {role} at Acme", exact=True).select_option("interviewing")
     expect(page.locator('[data-count="applied"]')).to_have_text(str(applied_before))
     expect(page.locator('[data-count="interviewing"]')).to_have_text(str(interviewing_before + 1))
     page.locator('[data-filter="interviewing"]').click()
