@@ -696,3 +696,26 @@ def test_job_description_upload_rejects_bad_files_and_other_owners() -> None:
     )
     assert other.status_code == 404
     assert client.delete(url, headers={"x-advisory-user": "intruder"}).status_code == 404
+
+
+def test_free_review_uses_low_cost_model_and_members_use_stronger_model(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    free = web.free_ai_service()
+    member = web.member_ai_service()
+    assert free.pricing.model == web.settings.free_openai_model == "gpt-6-luna"
+    assert member.pricing.model == web.settings.openai_model == "gpt-6.1-terra"
+    assert free.maximum_cost < member.maximum_cost
+
+    created: list[str] = []
+
+    def fake_client(model: str) -> str:
+        created.append(model)
+        return model
+
+    monkeypatch.setattr(web.settings, "environment", "production")
+    monkeypatch.setattr(web, "openai_client", fake_client)
+    monkeypatch.setattr(web, "OpenAiReviewer", lambda client: client)
+    assert web.ai_reviewer(free_tier=True) == "gpt-6-luna"
+    assert web.ai_reviewer() == "gpt-6.1-terra"
+    assert created == ["gpt-6-luna", "gpt-6.1-terra"]

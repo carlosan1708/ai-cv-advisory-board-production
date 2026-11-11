@@ -10,7 +10,7 @@
 - Firestore: owner-scoped applications, CV metadata/extracted text, monthly AI ledgers, and metadata-only
   AI audit events
 - Cloud Storage: private immutable CV bytes in `users/{subject}/cv-versions/...`
-- AI model: OpenAI `gpt-6-luna` via Chat Completions, strict JSON-schema output, `reasoning_effort=low`
+- AI models: OpenAI `gpt-6.1-terra` for approved members and `gpt-6-luna` for the anonymous free review, via Chat Completions, strict JSON-schema output, `reasoning_effort=low`
   (model, effort, and per-token prices are configurable; keep prices in sync with OpenAI's pricing page)
 - Identity: Google ID token; stable `sub` claim is the owner key
 - AI ceilings: $5/month shared anonymous, $10/month per approved user, and $50/month project-wide
@@ -24,7 +24,7 @@ Production environment variables:
 - `ADVISORY_GOOGLE_OAUTH_CLIENT_ID=<web client ID>`
 - `ADVISORY_CV_BUCKET=ai-cv-advisory-board-production-cvs`
 - `OPENAI_API_KEY` mounted from Secret Manager (never a plain env var or a committed file)
-- Optional: `ADVISORY_OPENAI_MODEL`, `ADVISORY_OPENAI_REASONING_EFFORT`,
+- Optional: `ADVISORY_OPENAI_MODEL`, `ADVISORY_FREE_OPENAI_MODEL` (and their `*_MICRO_USD_PER_MILLION` prices), `ADVISORY_OPENAI_REASONING_EFFORT`,
   `ADVISORY_OPENAI_INPUT_MICRO_USD_PER_MILLION`, `ADVISORY_OPENAI_OUTPUT_MICRO_USD_PER_MILLION`
 
 The app refuses to start in production unless `ADVISORY_AUTH_MODE=google` and an OpenAI key are set.

@@ -215,7 +215,14 @@ def tracker_service() -> TrackerService:
     return TrackerService(career_repository, cv_document_parser())
 
 
-def ai_pricing() -> Pricing:
+def ai_pricing(*, free_tier: bool = False) -> Pricing:
+    if free_tier:
+        return Pricing(
+            model=settings.free_openai_model,
+            version="settings",
+            input_micro_usd_per_million=settings.free_openai_input_micro_usd_per_million,
+            output_micro_usd_per_million=settings.free_openai_output_micro_usd_per_million,
+        )
     return Pricing(
         model=settings.openai_model,
         version="settings",
@@ -224,27 +231,28 @@ def ai_pricing() -> Pricing:
     )
 
 
-@lru_cache(maxsize=1)
-def openai_client() -> OpenAiStructuredClient:
+@lru_cache(maxsize=2)
+def openai_client(model: str) -> OpenAiStructuredClient:
     return OpenAiStructuredClient(
         api_key=settings.openai_api_key.get_secret_value(),
-        model=settings.openai_model,
+        model=model,
         reasoning_effort=settings.openai_reasoning_effort,
         max_output_tokens=settings.ai_max_output_tokens,
     )
 
 
-def ai_reviewer() -> AiReviewer:
+def ai_reviewer(*, free_tier: bool = False) -> AiReviewer:
     if settings.environment == "production":
-        return OpenAiReviewer(openai_client())
+        model = settings.free_openai_model if free_tier else settings.openai_model
+        return OpenAiReviewer(openai_client(model))
     return DeterministicAiReviewer()
 
 
-def _board_service(ledger: BudgetLedger) -> BudgetedAiService:
+def _board_service(ledger: BudgetLedger, *, free_tier: bool = False) -> BudgetedAiService:
     return BudgetedAiService(
-        ai_reviewer(),
+        ai_reviewer(free_tier=free_tier),
         ledger,
-        pricing=ai_pricing(),
+        pricing=ai_pricing(free_tier=free_tier),
         max_input_tokens=settings.ai_max_input_tokens,
         max_output_tokens=settings.ai_max_output_tokens,
         emergency_ledger=project_budget_ledger,
@@ -253,7 +261,7 @@ def _board_service(ledger: BudgetLedger) -> BudgetedAiService:
 
 
 def free_ai_service() -> BudgetedAiService:
-    return _board_service(free_budget_ledger)
+    return _board_service(free_budget_ledger, free_tier=True)
 
 
 def member_ai_service() -> BudgetedAiService:
@@ -263,7 +271,7 @@ def member_ai_service() -> BudgetedAiService:
 def member_cv_service() -> BudgetedCvService:
     reviewer: CvReviewer
     if settings.environment == "production":
-        reviewer = OpenAiCvReviewer(openai_client())
+        reviewer = OpenAiCvReviewer(openai_client(settings.openai_model))
     else:
         reviewer = DeterministicCvReviewer()
     return BudgetedCvService(
@@ -571,7 +579,7 @@ def admin_ai_usage(request: Request) -> dict[str, object]:
     )
     return {
         "month": current_month,
-        "model": settings.openai_model,
+        "model": f"{settings.openai_model} (members) · {settings.free_openai_model} (free)",
         "privacy_note": "Operational metadata only. CV text, job text, and generated prose are not stored.",
         "free": _budget_payload(free_budget_ledger, "anonymous-free-tier"),
         "project": _budget_payload(project_budget_ledger, PROJECT_BUDGET_OWNER),
@@ -1184,7 +1192,7 @@ async def analyze(
             advisor_ids=selected_advisor_ids,
             score=ai_review.fit_score if ai_review and not ai_degraded else assessment.score,
             band=_score_band(ai_review.fit_score) if ai_review and not ai_degraded else assessment.band,
-            model=usage.model if usage else settings.openai_model,
+            model=usage.model if usage else settings.free_openai_model,
             input_tokens=usage.input_tokens if usage else 0,
             output_tokens=usage.output_tokens if usage else 0,
             actual_micro_usd=usage.actual_micro_usd if usage else 0,

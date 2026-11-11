@@ -29,10 +29,15 @@ class Settings(BaseSettings):
         default=SecretStr(""),
         validation_alias=AliasChoices("ADVISORY_OPENAI_API_KEY", "OPENAI_API_KEY"),
     )
-    openai_model: str = "gpt-6-luna"
+    # Approved members: stronger model.
+    openai_model: str = "gpt-6.1-terra"
     openai_reasoning_effort: Literal["none", "minimal", "low", "medium", "high"] = "low"
-    openai_input_micro_usd_per_million: int = Field(default=100_000, ge=1)
-    openai_output_micro_usd_per_million: int = Field(default=500_000, ge=1)
+    openai_input_micro_usd_per_million: int = Field(default=1_000_000, ge=1)
+    openai_output_micro_usd_per_million: int = Field(default=5_000_000, ge=1)
+    # Anonymous free review: low-cost model so the shared pool lasts.
+    free_openai_model: str = "gpt-6-luna"
+    free_openai_input_micro_usd_per_million: int = Field(default=100_000, ge=1)
+    free_openai_output_micro_usd_per_million: int = Field(default=500_000, ge=1)
     ai_max_input_tokens: int = Field(default=65_000, ge=1_000, le=400_000)
     ai_max_output_tokens: int = Field(default=6_000, ge=1_000, le=32_000)
     ai_monthly_limit_micro_usd: int = Field(default=5_000_000, ge=100_000, le=100_000_000)
