@@ -55,6 +55,9 @@
     const versionLabel = cvLabel(application.cv_version_id);
     attachment.textContent = versionLabel ? `CV · ${versionLabel}` : "No CV attached";
     attachment.classList.toggle("empty", !versionLabel);
+    const jobAttachment = card.querySelector(".job-attachment");
+    jobAttachment.textContent = application.job_description_filename ? `Job · ${application.job_description_filename}` : "";
+    jobAttachment.hidden = !application.job_description_filename;
     const aiButton = card.querySelector(".ai-review-button");
     aiButton.hidden = true;
     aiButton.addEventListener("click", async () => {
@@ -73,7 +76,9 @@
       form.elements.application_id.value = application.id;
       applicationReviewDialog.querySelector("[data-application-review-title]").textContent = `${application.role} at ${application.company}`;
       applicationReviewDialog.querySelector("[data-application-review-cv]").textContent = `Attached CV · ${versionLabel}`;
-      applicationReviewDialog.querySelector("[data-application-review-job]").textContent = application.job_url ? "Public job link saved" : "Paste the job description below";
+      applicationReviewDialog.querySelector("[data-application-review-job]").textContent = application.job_description_filename
+        ? `Job description saved · ${application.job_description_filename}`
+        : application.job_url ? "Public job link saved" : "Paste the job description below, or upload a PDF on the application";
       applicationReviewDialog.querySelector("[data-application-review-error]").textContent = "";
       applicationReviewDialog.showModal();
     });
@@ -268,12 +273,35 @@
     appDialog.querySelector("[data-application-submit]").textContent = application ? "Save changes" : "Add application";
     appDialog.querySelector("[data-delete-application]").hidden = !application;
     appDialog.querySelector("[data-application-optional]").open = Boolean(application);
+    renderJobFile(application);
     document.querySelector("[data-application-error]").textContent = "";
     appDialog.showModal();
   }
+  function renderJobFile(application) {
+    const current = appDialog.querySelector("[data-job-file-current]");
+    current.hidden = !application?.job_description_filename;
+    appDialog.querySelector("[data-job-file-name]").textContent = application?.job_description_filename || "";
+  }
+  function replaceApplication(updated) {
+    state.applications = state.applications.map((item) => (item.id === updated.id ? updated : item));
+  }
+  async function uploadJobFile(id, file) {
+    const body = new FormData(); body.append("job_file", file);
+    const updated = await api(`/api/applications/${id}/job-description`, { method: "POST", body });
+    replaceApplication(updated);
+    return updated;
+  }
+  appDialog.querySelector("[data-remove-job-file]").addEventListener("click", async () => {
+    const id = appDialog.querySelector("[data-application-form]").elements.application_id.value;
+    const error = document.querySelector("[data-application-error]"); error.textContent = "";
+    try {
+      const updated = await api(`/api/applications/${id}/job-description`, { method: "DELETE" });
+      replaceApplication(updated); renderJobFile(updated); render();
+    } catch (exc) { error.textContent = exc.message; }
+  });
   function applicationPayload(form) {
     const data = Object.fromEntries(new FormData(form));
-    delete data.application_id;
+    delete data.application_id; delete data.job_file;
     ["applied_date", "next_action_due", "cv_version_id"].forEach((name) => { if (!data[name]) data[name] = null; });
     return data;
   }
@@ -311,17 +339,35 @@
   document.querySelector("[data-application-form]").addEventListener("submit", async (event) => {
     if (event.submitter?.value === "cancel") return;
     event.preventDefault(); const form = event.currentTarget; const id = form.elements.application_id.value; const data = applicationPayload(form);
+    const jobFile = form.elements.job_file.files?.[0];
+    const submitButton = form.querySelector("[data-application-submit]");
     document.querySelector("[data-application-error]").textContent = "";
+    submitButton.disabled = true;
     try {
+      let saved;
       if (id) {
-        const updated = await api(`/api/applications/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) });
-        state.applications = state.applications.map((item) => (item.id === id ? updated : item));
+        saved = await api(`/api/applications/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) });
+        replaceApplication(saved);
       } else {
-        state.applications.unshift(await api("/api/applications", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }));
+        saved = await api("/api/applications", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) });
+        state.applications.unshift(saved);
+        form.elements.application_id.value = saved.id;
+      }
+      if (jobFile) {
+        submitButton.textContent = "Reading job description…";
+        try { await uploadJobFile(saved.id, jobFile); }
+        catch (uploadError) {
+          render(); renderJobFile(saved);
+          appDialog.querySelector("[data-delete-application]").hidden = false;
+          submitButton.textContent = "Save changes";
+          form.elements.job_file.value = "";
+          throw new Error(`Application saved, but the job file was not: ${uploadError.message}`);
+        }
       }
       form.reset(); appDialog.close(); render();
     }
     catch (error) { document.querySelector("[data-application-error]").textContent = error.message; }
+    finally { submitButton.disabled = false; if (submitButton.textContent.startsWith("Reading")) submitButton.textContent = "Save changes"; }
   });
   document.querySelector("[data-cv-form]").addEventListener("submit", async (event) => {
     if (event.submitter?.value === "cancel") return;

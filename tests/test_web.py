@@ -616,3 +616,83 @@ def test_production_refuses_development_identity() -> None:
         Settings(environment="production", auth_mode="google", openai_api_key="")
     valid = Settings(environment="production", auth_mode="google", openai_api_key="sk-test")
     assert valid.auth_mode == "google"
+
+
+def _text_pdf(lines: list[str]) -> bytes:
+    """Build a tiny valid one-page PDF so upload tests exercise real PDF parsing."""
+    stream = "BT /F1 12 Tf 72 720 Td 14 TL " + " ".join(f"({line}) Tj T*" for line in lines) + " ET"
+    objects = [
+        "<< /Type /Catalog /Pages 2 0 R >>",
+        "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+        "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R "
+        "/Resources << /Font << /F1 5 0 R >> >> >>",
+        f"<< /Length {len(stream)} >>\nstream\n{stream}\nendstream",
+        "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+    ]
+    body = "%PDF-1.4\n"
+    offsets = []
+    for number, obj in enumerate(objects, start=1):
+        offsets.append(len(body))
+        body += f"{number} 0 obj\n{obj}\nendobj\n"
+    xref = len(body)
+    body += f"xref\n0 {len(objects) + 1}\n0000000000 65535 f \n"
+    body += "".join(f"{offset:010d} 00000 n \n" for offset in offsets)
+    body += f"trailer\n<< /Size {len(objects) + 1} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n"
+    return body.encode("latin-1")
+
+
+def test_job_description_pdf_is_stored_and_used_for_review() -> None:
+    web.career_repository.clear()
+    headers = {"x-advisory-user": "jd-user"}
+    version = client.post(
+        "/api/cv-versions",
+        headers=headers,
+        data={"label": "CV"},
+        files={"cv_file": ("resume.txt", b"EXPERIENCE\nBuilt Python services on Kubernetes", "text/plain")},
+    ).json()
+    application = client.post(
+        "/api/applications",
+        headers=headers,
+        json={"company": "Acme", "role": "Engineer", "cv_version_id": version["id"]},
+    ).json()
+    pdf = _text_pdf(["Platform Engineer", "Requirements: Python and Kubernetes"])
+    uploaded = client.post(
+        f"/api/applications/{application['id']}/job-description",
+        headers=headers,
+        files={"job_file": ("posting.pdf", pdf, "application/pdf")},
+    )
+    assert uploaded.status_code == 200
+    assert uploaded.json()["job_description_filename"] == "posting.pdf"
+    assert "job_description" not in uploaded.json()
+    listed = client.get("/api/applications", headers=headers).json()[0]
+    assert listed["job_description_filename"] == "posting.pdf"
+    assert "job_description" not in listed
+    stored = web.career_repository.get_application("jd-user", application["id"])
+    assert "Kubernetes" in stored.job_description
+
+    reviewed = client.post(f"/api/applications/{application['id']}/ai-review", headers=headers)
+    assert reviewed.status_code == 200
+    assert any("kubernetes" in item.lower() for item in reviewed.json()["review"]["supported_strengths"])
+
+    removed = client.delete(f"/api/applications/{application['id']}/job-description", headers=headers)
+    assert removed.json()["job_description_filename"] == ""
+    assert client.post(f"/api/applications/{application['id']}/ai-review", headers=headers).status_code == 422
+
+
+def test_job_description_upload_rejects_bad_files_and_other_owners() -> None:
+    web.career_repository.clear()
+    headers = {"x-advisory-user": "jd-owner"}
+    application = client.post(
+        "/api/applications", headers=headers, json={"company": "Acme", "role": "Engineer"}
+    ).json()
+    url = f"/api/applications/{application['id']}/job-description"
+    wrong_type = client.post(url, headers=headers, files={"job_file": ("job.docx", b"PK", "application/zip")})
+    assert wrong_type.status_code == 422
+    assert "job description" in wrong_type.json()["detail"]
+    other = client.post(
+        url,
+        headers={"x-advisory-user": "intruder"},
+        files={"job_file": ("job.txt", b"Python role", "text/plain")},
+    )
+    assert other.status_code == 404
+    assert client.delete(url, headers={"x-advisory-user": "intruder"}).status_code == 404

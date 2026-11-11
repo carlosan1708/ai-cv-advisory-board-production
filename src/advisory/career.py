@@ -68,6 +68,8 @@ class ApplicationUpdate(BaseModel):
     notes: str | None = Field(default=None, max_length=10_000)
     fit_score: int | None = Field(default=None, ge=0, le=100)
     ai_summary: str | None = Field(default=None, max_length=700)
+    job_description: str | None = Field(default=None, max_length=30_000)
+    job_description_filename: str | None = Field(default=None, max_length=200)
 
     @field_validator("company", "role")
     @classmethod
@@ -95,6 +97,8 @@ class Application(ApplicationCreate):
     owner_id: str
     fit_score: int | None = Field(default=None, ge=0, le=100)
     ai_summary: str = ""
+    job_description: str = Field(default="", max_length=30_000)
+    job_description_filename: str = Field(default="", max_length=200)
     archive_id: str | None = None
     created_at: datetime
     updated_at: datetime

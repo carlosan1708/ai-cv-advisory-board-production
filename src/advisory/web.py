@@ -193,6 +193,17 @@ def cv_document_parser() -> CvDocumentParser:
     )
 
 
+def job_document_parser() -> CvDocumentParser:
+    return CvDocumentParser(
+        max_file_bytes=settings.max_upload_bytes,
+        max_chars=settings.max_input_chars,
+        document_name="job description",
+    )
+
+
+APPLICATION_LIST_EXCLUDE = {"job_description"}
+
+
 def job_description_fetcher() -> JobDescriptionFetcher:
     return JobDescriptionFetcher(
         max_response_bytes=settings.max_job_page_bytes,
@@ -589,7 +600,10 @@ def decide_workspace_access(request: Request, record_id: str, payload: AccessDec
 
 @app.get("/api/applications")
 def list_applications(request: Request) -> list[dict[str, object]]:
-    return [item.model_dump(mode="json") for item in career_repository.list_applications(owner_id(request))]
+    return [
+        item.model_dump(mode="json", exclude=APPLICATION_LIST_EXCLUDE)
+        for item in career_repository.list_applications(owner_id(request))
+    ]
 
 
 @app.post("/api/applications", status_code=201)
@@ -599,7 +613,7 @@ def create_application(request: Request, payload: ApplicationCreate) -> dict[str
     except NotFoundError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     emit("application.created", user_id=owner_id(request), application_id=item.id, status=item.status)
-    return item.model_dump(mode="json")
+    return item.model_dump(mode="json", exclude=APPLICATION_LIST_EXCLUDE)
 
 
 @app.patch("/api/applications/{application_id}")
@@ -611,7 +625,47 @@ def update_application(
     except NotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     emit("application.updated", user_id=owner_id(request), application_id=item.id, status=item.status)
-    return item.model_dump(mode="json")
+    return item.model_dump(mode="json", exclude=APPLICATION_LIST_EXCLUDE)
+
+
+@app.post("/api/applications/{application_id}/job-description")
+async def upload_job_description(
+    request: Request,
+    application_id: str,
+    job_file: UploadFile = File(...),  # noqa: B008
+) -> dict[str, object]:
+    owner = owner_id(request)
+    filename = Path(job_file.filename or "job-description.txt").name[:200]
+    payload = await job_file.read(settings.max_upload_bytes + 1)
+    try:
+        career_repository.get_application(owner, application_id)
+        text = job_document_parser().parse(filename, payload)
+        item = career_repository.update_application(
+            owner,
+            application_id,
+            ApplicationUpdate(job_description=text, job_description_filename=filename),
+        )
+    except NotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except CvDocumentError as exc:
+        emit("job.ingestion.failed", source="upload", file_bytes=len(payload), error_type=type(exc).__name__)
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    emit("job.ingestion.completed", source="upload", file_bytes=len(payload), job_chars=len(text))
+    return item.model_dump(mode="json", exclude=APPLICATION_LIST_EXCLUDE)
+
+
+@app.delete("/api/applications/{application_id}/job-description")
+def remove_job_description(request: Request, application_id: str) -> dict[str, object]:
+    owner = owner_id(request)
+    try:
+        item = career_repository.update_application(
+            owner,
+            application_id,
+            ApplicationUpdate(job_description="", job_description_filename=""),
+        )
+    except NotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return item.model_dump(mode="json", exclude=APPLICATION_LIST_EXCLUDE)
 
 
 @app.delete("/api/applications/{application_id}", status_code=204)
@@ -658,7 +712,9 @@ def get_workspace_archive(request: Request, archive_id: str) -> dict[str, object
     emit("workspace.archive_viewed", user_id=owner, archive_id=archive_id)
     return {
         "archive": detail.archive.model_dump(mode="json"),
-        "applications": [item.model_dump(mode="json") for item in detail.applications],
+        "applications": [
+            item.model_dump(mode="json", exclude=APPLICATION_LIST_EXCLUDE) for item in detail.applications
+        ],
         "cv_versions": [
             item.model_dump(mode="json", exclude={"extracted_text"})
             for item in detail.cv_versions
@@ -850,14 +906,20 @@ async def application_ai_review(
         version = career_repository.get_cv_version(owner_id(request), application.cv_version_id)
     except NotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
-    resolved_job = job_text.strip()
+    resolved_job = job_text.strip() or application.job_description.strip()
     if not resolved_job and application.job_url:
         try:
             resolved_job = await run_in_threadpool(job_description_fetcher().fetch, application.job_url)
         except JobDescriptionError as exc:
-            raise HTTPException(status_code=422, detail=str(exc)) from exc
+            raise HTTPException(
+                status_code=422,
+                detail=f"{exc} You can also upload the posting as a PDF on the application.",
+            ) from exc
     if not resolved_job:
-        raise HTTPException(status_code=422, detail="Add a job description or public job link first")
+        raise HTTPException(
+            status_code=422,
+            detail="Add a public job link, upload the job description PDF, or paste the description first",
+        )
     owner = owner_id(request)
     try:
         _enforce_ai_rate(owner, settings.member_ai_requests_per_minute, "approved")

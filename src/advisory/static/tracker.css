@@ -65,3 +65,7 @@
 .card-due { margin: 4px 0 0; color: var(--muted); font-size: 0.78rem; font-weight: 600; }
 .card-due.overdue { color: #b42318; }
 .danger-action { margin-right: auto; color: #b42318; }
+
+.job-file-field input[type="file"] { margin-top: 6px; font-size: 0.85rem; }
+.job-file-current { margin-top: 8px; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 10px; font-size: 0.85rem; }
+.job-file-current strong { word-break: break-all; }

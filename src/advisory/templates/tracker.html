@@ -6,7 +6,7 @@
   <title>Application pipeline · AI CV Advisory Board</title>
   <meta name="description" content="Track every application, next action, and the exact CV version you sent.">
   <link rel="stylesheet" href="/static/app.css?v=12">
-  <link rel="stylesheet" href="/static/tracker.css?v=8">
+  <link rel="stylesheet" href="/static/tracker.css?v=9">
   {% if auth_mode == "google" %}<script src="https://accounts.google.com/gsi/client" async defer></script>{% endif %}
 </head>
 <body class="tracker-page">
@@ -154,9 +154,17 @@
         <label>CV version <select name="cv_version_id" data-cv-select><option value="">Not attached yet</option></select></label>
       </div>
       <details class="optional-fields" data-application-optional>
-        <summary>Add job link, dates, and next step <span>+</span></summary>
+        <summary>Add job link or file, dates, and next step <span>+</span></summary>
         <div class="optional-content">
           <label>Public job link <input name="job_url" type="url" placeholder="https://company.com/jobs/..."></label>
+          <div class="job-file-field">
+            <label>Job description file <span class="optional-label">PDF or TXT, for postings without a public link</span>
+              <input name="job_file" type="file" accept=".pdf,.txt,application/pdf,text/plain" data-job-file-input data-testid="job-file-input"></label>
+            <div class="job-file-current" data-job-file-current hidden>
+              <span>Saved &middot; <strong data-job-file-name></strong></span>
+              <button class="text-action as-button" type="button" data-remove-job-file>Remove</button>
+            </div>
+          </div>
           <div class="field-grid two-columns">
             <label>Applied on <input name="applied_date" type="date"></label>
             <label>Next action due <input name="next_action_due" type="date"></label>
@@ -191,7 +199,7 @@
       <p class="dialog-lede">We will compare the attached library version with this application. If the public job link is unavailable, paste the description below.</p>
       <div class="review-context"><strong data-application-review-cv></strong><span data-application-review-job></span></div>
       <input name="application_id" type="hidden">
-      <label>Job description <span class="optional-label">Optional when a public job link is saved</span><textarea name="job_text" rows="8" placeholder="Paste the role responsibilities and requirements…"></textarea></label>
+      <label>Job description <span class="optional-label">Optional when a job link or file is saved</span><textarea name="job_text" rows="8" placeholder="Paste the role responsibilities and requirements…"></textarea></label>
       <p class="form-error" data-application-review-error></p>
       <div class="dialog-actions"><button class="button button-secondary" value="cancel">Cancel</button><button class="button button-primary" type="submit" value="default">Review attached CV</button></div>
     </form>
@@ -203,7 +211,7 @@
       <p class="dialog-lede">Start with a saved CV. You can review the document itself or compare it with a tracked application.</p>
       <label>CV version <select name="cv_version_id" data-expert-cv required><option value="">Choose a CV</option></select></label>
       <fieldset class="review-scope"><legend>Review type</legend><label><input type="radio" name="scope" value="standalone" checked><span><strong>Review this CV</strong><small>Clarity, impact, structure, and seniority</small></span></label><label><input type="radio" name="scope" value="application"><span><strong>Compare with an application</strong><small>Fit, supported strengths, and missing evidence</small></span></label></fieldset>
-      <div class="application-review-fields" data-expert-application-fields hidden><label>Application <select name="application_id" data-expert-application><option value="">Choose an application</option></select></label><label>Job description <span class="optional-label">Optional when the application has a public link</span><textarea name="job_text" rows="6" placeholder="Paste the description when no public job link is available…"></textarea></label></div>
+      <div class="application-review-fields" data-expert-application-fields hidden><label>Application <select name="application_id" data-expert-application><option value="">Choose an application</option></select></label><label>Job description <span class="optional-label">Optional when the application has a job link or file</span><textarea name="job_text" rows="6" placeholder="Paste the description when no public job link is available…"></textarea></label></div>
       <p class="form-error" data-expert-error></p>
       <div class="expert-result" data-expert-result hidden><div class="expert-result-score"><strong data-expert-score></strong><span>/100</span></div><div><h3 data-expert-summary></h3><div class="expert-result-grid"><section><span>TR</span><h4>Recruiter</h4><ul data-expert-recruiter></ul></section><section><span>HM</span><h4>Hiring Manager</h4><ul data-expert-manager></ul></section><section><span>TE</span><h4>Technical Reviewer</h4><ul data-expert-technical></ul></section></div></div></div>
       <div class="dialog-actions"><button class="button button-secondary" value="cancel">Close</button><button class="button button-primary" type="submit" value="default" data-run-expert>Ask the AI panel</button></div>
@@ -217,12 +225,13 @@
       <p class="next-action"></p>
       <p class="card-due" hidden></p>
       <div class="cv-attachment"></div>
+      <div class="cv-attachment job-attachment" hidden></div>
       <button class="ai-review-button" type="button" hidden>Review attached CV</button>
       <button class="application-review-button ai-review-button" type="button" hidden>Review attached CV</button>
       <p class="ai-summary"></p>
       <div class="card-footer"><label class="status-control">Move to<select></select></label><button class="text-action card-edit-button" type="button">Edit</button></div>
     </article>
   </template>
-  <script src="/static/tracker.js?v=8" defer></script>
+  <script src="/static/tracker.js?v=9" defer></script>
 </body>
 </html>

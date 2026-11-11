@@ -28,12 +28,15 @@ class CvDocumentParser:
     max_file_bytes: int = 5 * 1024 * 1024
     max_chars: int = 30_000
     max_pdf_pages: int = 40
+    document_name: str = "CV"
 
     def parse(self, filename: str, content: bytes) -> str:
         if not content:
-            raise CvDocumentError("The selected file is empty. Choose a PDF or TXT CV.")
+            raise CvDocumentError(f"The selected file is empty. Choose a PDF or TXT {self.document_name}.")
         if len(content) > self.max_file_bytes:
-            raise CvDocumentError("The CV is larger than 5 MB. Choose a smaller PDF or TXT file.")
+            raise CvDocumentError(
+                f"The {self.document_name} is larger than 5 MB. Choose a smaller PDF or TXT file."
+            )
 
         suffix = Path(filename).suffix.lower()
         if suffix == ".txt":
@@ -41,16 +44,20 @@ class CvDocumentParser:
         elif suffix == ".pdf":
             text = self._parse_pdf(content)
         else:
-            raise CvDocumentError("That file type is not supported. Choose a PDF or TXT CV.")
+            raise CvDocumentError(
+                f"That file type is not supported. Choose a PDF or TXT {self.document_name}."
+            )
 
         text = text.replace("\x00", "").replace("\r\n", "\n").strip()
         if not text:
             raise CvDocumentError(
-                "No readable text was found. If this is a scanned PDF, paste the CV text instead."
+                "No readable text was found. If this is a scanned PDF, "
+                f"paste the {self.document_name} text instead."
             )
         if len(text) > self.max_chars:
             raise CvDocumentError(
-                f"The extracted CV is longer than {self.max_chars:,} characters. Use a shorter version."
+                f"The extracted {self.document_name} is longer than {self.max_chars:,} characters. "
+                "Use a shorter version."
             )
         return text
 
@@ -72,14 +79,15 @@ class CvDocumentParser:
                 raise CvDocumentError("Password-protected PDFs are not supported. Upload an unlocked copy.")
             if len(reader.pages) > self.max_pdf_pages:
                 raise CvDocumentError(
-                    f"The PDF has more than {self.max_pdf_pages} pages. Upload a shorter CV."
+                    f"The PDF has more than {self.max_pdf_pages} pages. "
+                    f"Upload a shorter {self.document_name}."
                 )
             return "\n".join(page.extract_text() or "" for page in reader.pages)
         except CvDocumentError:
             raise
         except Exception as exc:
             raise CvDocumentError(
-                "The PDF could not be read. Upload a valid PDF or paste the CV text."
+                f"The PDF could not be read. Upload a valid PDF or paste the {self.document_name} text."
             ) from exc
 
 
