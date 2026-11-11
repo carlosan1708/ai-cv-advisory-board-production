@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>AI Job Match | AI CV Advisory Board</title>
   <meta name="description" content="Compare a CV with a specific job using grounded AI.">
-  <link rel="stylesheet" href="/static/app.css?v=11">
+  <link rel="stylesheet" href="/static/app.css?v=12">
   <script src="/static/app.js?v=11" defer></script>
 </head>
 <body class="workspace-page{% if assessment %} has-results{% endif %}{% if error %} has-error{% endif %}">
@@ -166,7 +166,7 @@
           </div>
           <p class="source-error" data-advisor-error role="alert" aria-live="polite"></p>
 
-          <div class="board-promise"><span aria-hidden="true">i</span><p><strong>Your composition controls the review.</strong> Only the specialists selected above receive a finding. They share one evidence-grounded Gemini response, and no CV or job content is saved.</p></div>
+          <div class="board-promise"><span aria-hidden="true">i</span><p><strong>Your composition controls the review.</strong> Only the specialists selected above receive a finding. They share one evidence-grounded AI response, and no CV or job content is saved.</p></div>
           <div class="panel-actions">
             <button class="text-action as-button" type="button" data-previous-step="2">&larr; Back to job</button>
             <button class="button button-primary" type="submit" data-testid="analyze-button">Start board review <span aria-hidden="true">&rarr;</span></button>
@@ -198,16 +198,17 @@
     <section class="results" aria-labelledby="decision-title" data-testid="results">
       <section class="decision-card primary-decision" aria-describedby="score-disclaimer">
         <div class="result-score">
-          <span>Evidence match</span>
-          <div><strong data-testid="score">{{ assessment.score }}</strong><small>/100</small></div>
-          <span class="band-badge band-{{ assessment.band }}">{{ assessment.band }} match</span>
+          <span>{% if headline_source == 'panel' %}AI panel fit{% else %}Evidence match{% endif %}</span>
+          <div><strong data-testid="score">{{ headline_score }}</strong><small>/100</small></div>
+          <span class="band-badge band-{{ headline_band }}">{{ headline_band }} match</span>
+          {% if headline_source == 'panel' %}<small class="secondary-score" data-testid="evidence-score">Keyword evidence check: {{ assessment.score }}/100</small>{% endif %}
         </div>
         <div class="decision-copy">
           <span class="overline">At a glance</span>
-          {% if assessment.band == 'strong' %}
+          {% if headline_band == 'strong' %}
           <h2 id="decision-title">Your CV makes a credible case for this role.</h2>
           <p>{{ matched | length }} of {{ assessment.requirements | length }} priority requirements have direct support. Use the evidence ledger to strengthen the remaining gaps.</p>
-          {% elif assessment.band == 'partial' %}
+          {% elif headline_band == 'partial' %}
           <h2 id="decision-title">The fit is promising, but the evidence is uneven.</h2>
           <p>{{ matched | length }} of {{ assessment.requirements | length }} priority requirements have direct support. Address the highest-value gaps before tailoring the application.</p>
           {% else %}
@@ -215,7 +216,7 @@
           <p>{{ matched | length }} of {{ assessment.requirements | length }} priority requirements have direct support. Treat missing evidence as a decision point, not permission to invent experience.</p>
           {% endif %}
           {% if assessment.recommendations %}<p class="decision-next"><strong>Best next step:</strong> {{ assessment.recommendations[0] }}</p>{% endif %}
-          <p class="score-disclaimer" id="score-disclaimer" data-testid="score-disclaimer"><span aria-hidden="true">i</span>{{ assessment.warnings[0] }}</p>
+          <p class="score-disclaimer" id="score-disclaimer" data-testid="score-disclaimer"><span aria-hidden="true">i</span>{% if headline_source == 'panel' %}The headline score is the AI panel's judgement of how well the CV's evidence fits this job. It is not a prediction of a commercial ATS.{% else %}{{ assessment.warnings[0] }}{% endif %}</p>
           <span class="run-meta">Run {{ run_id[:8] }} &middot; {{ assessment.scoring_version }} &middot; Schema {{ assessment.schema_version }}</span>
         </div>
         <div class="decision-facts" aria-label="Finding totals">
@@ -234,7 +235,7 @@
       <section class="board-report" aria-labelledby="ai-insight-title" data-testid="ai-review-result">
         {% if ai_notice %}<div class="board-fallback-notice" role="status"><strong>Sample mode</strong><p>{{ ai_notice }}</p></div>{% endif %}
         <div class="board-consensus">
-          <div><span class="overline">{% if ai_notice %}Sample panel analysis{% else %}Gemini panel analysis{% endif %}</span><h2 id="ai-insight-title">What your selected panel wants you to know.</h2><p>{{ ai_review.summary }}</p><small>Built from this session's source documents. Verify every statement before using it.</small></div>
+          <div><span class="overline">{% if ai_notice %}Sample panel analysis{% else %}AI panel analysis{% endif %}</span><h2 id="ai-insight-title">What your selected panel wants you to know.</h2><p>{{ ai_review.summary }}</p><small>Built from this session's source documents. Verify every statement before using it.</small></div>
         </div>
 
         {% if ai_review.advisor_findings %}
@@ -247,7 +248,7 @@
               <div class="advisor-verdict-heading"><span class="advisor-avatar">{{ advisor.initials if advisor else 'AI' }}</span><div><strong>{{ advisor.name if advisor else 'Board advisor' }}</strong><small>{{ advisor.role if advisor else 'Selected specialist' }}</small></div></div>
               <h3>{{ finding.headline }}</h3>
               <p>{{ finding.finding }}</p>
-              <div class="verdict-evidence"><span>Evidence used</span>{% for evidence in finding.evidence %}<q>{{ evidence }}</q>{% endfor %}</div>
+              <div class="verdict-evidence"><span>Evidence used</span>{% for evidence in finding.evidence %}<q>{{ evidence }}</q>{% else %}<p>No direct CV line supports this point yet.</p>{% endfor %}</div>
               <div class="verdict-action"><span aria-hidden="true">&rarr;</span><p>{{ finding.recommendation }}</p></div>
             </article>
             {% endfor %}
@@ -280,7 +281,7 @@
       {% endif %}
 
       <section class="lens-section" aria-labelledby="lens-title">
-        <div class="result-section-heading"><div><span class="overline">Score breakdown</span><h2 id="lens-title">How the evidence match is calculated</h2></div><p>Three documented components add up to the score above.</p></div>
+        <div class="result-section-heading"><div><span class="overline">Keyword evidence check</span><h2 id="lens-title">How the rule-based evidence score is calculated</h2></div><p>Three documented components add up to {{ assessment.score }}/100{% if headline_source == 'panel' %}, a cross-check on the AI panel score above{% endif %}.</p></div>
         <div class="lens-grid">
           <article class="lens-card">
             <div class="lens-top"><span class="advisor-avatar">RC</span><span>{{ assessment.components.requirement_coverage }} / 70</span></div>

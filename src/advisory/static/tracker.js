@@ -15,12 +15,16 @@
   async function api(url, options = {}) {
     options.headers = { ...(options.headers || {}), ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}) };
     const response = await fetch(url, options);
+    if (response.status === 401 && authToken) {
+      authToken = "";
+      throw new Error("Your sign-in expired. Reload the page and sign in again.");
+    }
     if (!response.ok) {
       const payload = await response.json().catch(() => ({}));
       const detail = payload.detail;
       throw new Error((typeof detail === "object" ? detail.message : detail) || "Something went wrong. Try again.");
     }
-    return response.json();
+    return response.status === 204 ? null : response.json();
   }
 
   function cvLabel(id) {
@@ -35,6 +39,18 @@
     card.querySelector(".company-mark").textContent = application.company.slice(0, 2).toUpperCase();
     card.querySelector(".card-date").textContent = new Date(application.updated_at).toLocaleDateString(undefined, { month: "short", day: "numeric" });
     card.querySelector(".next-action").textContent = application.next_action ? `Next · ${application.next_action}` : "";
+    const due = card.querySelector(".card-due");
+    if (application.next_action_due && application.status !== "closed") {
+      const dueDate = new Date(`${application.next_action_due}T00:00:00`);
+      const today = new Date(); today.setHours(0, 0, 0, 0);
+      const overdue = dueDate < today;
+      due.textContent = `${overdue ? "Overdue" : "Due"} · ${dueDate.toLocaleDateString(undefined, { month: "short", day: "numeric" })}`;
+      due.classList.toggle("overdue", overdue);
+      due.hidden = false;
+    }
+    const editButton = card.querySelector(".card-edit-button");
+    editButton.setAttribute("aria-label", `Edit ${application.role} at ${application.company}`);
+    editButton.addEventListener("click", () => openApplicationDialog(application));
     const attachment = card.querySelector(".cv-attachment");
     const versionLabel = cvLabel(application.cv_version_id);
     attachment.textContent = versionLabel ? `CV · ${versionLabel}` : "No CV attached";
@@ -241,7 +257,38 @@
     expertDialog.querySelector("[data-expert-result]").hidden = false;
   }
 
-  document.querySelectorAll("[data-open-application]").forEach((button) => button.addEventListener("click", () => appDialog.showModal()));
+  const applicationFields = ["company", "role", "status", "cv_version_id", "job_url", "applied_date", "next_action_due", "next_action", "notes"];
+  function openApplicationDialog(application = null) {
+    const form = appDialog.querySelector("[data-application-form]");
+    form.reset();
+    form.elements.application_id.value = application?.id || "";
+    applicationFields.forEach((name) => { if (application) form.elements[name].value = application[name] ?? ""; });
+    appDialog.querySelector("[data-application-overline]").textContent = application ? "Edit opportunity" : "New opportunity";
+    appDialog.querySelector("[data-application-heading]").textContent = application ? `${application.role} at ${application.company}` : "Add an application";
+    appDialog.querySelector("[data-application-submit]").textContent = application ? "Save changes" : "Add application";
+    appDialog.querySelector("[data-delete-application]").hidden = !application;
+    appDialog.querySelector("[data-application-optional]").open = Boolean(application);
+    document.querySelector("[data-application-error]").textContent = "";
+    appDialog.showModal();
+  }
+  function applicationPayload(form) {
+    const data = Object.fromEntries(new FormData(form));
+    delete data.application_id;
+    ["applied_date", "next_action_due", "cv_version_id"].forEach((name) => { if (!data[name]) data[name] = null; });
+    return data;
+  }
+  document.querySelectorAll("[data-open-application]").forEach((button) => button.addEventListener("click", () => openApplicationDialog()));
+  appDialog.querySelector("[data-delete-application]").addEventListener("click", async () => {
+    const form = appDialog.querySelector("[data-application-form]");
+    const id = form.elements.application_id.value;
+    const application = state.applications.find((item) => item.id === id);
+    if (!application || !window.confirm(`Delete ${application.role} at ${application.company}? This cannot be undone. Your CV versions are kept.`)) return;
+    try {
+      await api(`/api/applications/${id}`, { method: "DELETE" });
+      state.applications = state.applications.filter((item) => item.id !== id);
+      appDialog.close(); render();
+    } catch (error) { document.querySelector("[data-application-error]").textContent = error.message; }
+  });
   document.querySelectorAll("[data-open-cv]").forEach((button) => button.addEventListener("click", () => cvDialog.showModal()));
   document.querySelectorAll("[data-open-expert-panel]").forEach((button) => button.addEventListener("click", () => { populateExpertPanel(); expertDialog.querySelector("[data-expert-result]").hidden = true; expertDialog.querySelector("[data-expert-error]").textContent = ""; expertDialog.showModal(); }));
   document.querySelectorAll("[data-open-history]").forEach((button) => button.addEventListener("click", (event) => openHistory(event).catch((error) => window.alert(error.message))));
@@ -263,9 +310,17 @@
   }));
   document.querySelector("[data-application-form]").addEventListener("submit", async (event) => {
     if (event.submitter?.value === "cancel") return;
-    event.preventDefault(); const form = event.currentTarget; const data = Object.fromEntries(new FormData(form));
+    event.preventDefault(); const form = event.currentTarget; const id = form.elements.application_id.value; const data = applicationPayload(form);
     document.querySelector("[data-application-error]").textContent = "";
-    try { state.applications.unshift(await api("/api/applications", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) })); form.reset(); appDialog.close(); render(); }
+    try {
+      if (id) {
+        const updated = await api(`/api/applications/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) });
+        state.applications = state.applications.map((item) => (item.id === id ? updated : item));
+      } else {
+        state.applications.unshift(await api("/api/applications", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }));
+      }
+      form.reset(); appDialog.close(); render();
+    }
     catch (error) { document.querySelector("[data-application-error]").textContent = error.message; }
   });
   document.querySelector("[data-cv-form]").addEventListener("submit", async (event) => {

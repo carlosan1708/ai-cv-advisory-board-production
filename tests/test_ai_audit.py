@@ -9,8 +9,8 @@ def test_audit_repository_is_bounded_recent_and_metadata_only() -> None:
         owner_id="anonymous-free-tier",
         access_tier="anonymous",
         review_type="job_match",
-        status="gemini",
-        model="gemini-2.5-flash",
+        status="ai",
+        model="gpt-6-luna",
         advisor_ids=["recruiter", "technical"],
         score=72,
         input_tokens=120,
@@ -22,7 +22,7 @@ def test_audit_repository_is_bounded_recent_and_metadata_only() -> None:
         access_tier="approved",
         review_type="cv",
         status="fallback",
-        model="gemini-2.5-flash",
+        model="gpt-6-luna",
     )
     repository.record(first)
     repository.record(second)

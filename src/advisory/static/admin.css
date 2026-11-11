@@ -35,7 +35,7 @@
 .review-row { display: grid; grid-template-columns: 36px minmax(220px, 1fr) 80px 150px 150px; gap: 15px; align-items: center; padding: 16px; }
 .review-row + .review-row { border-top: 1px solid var(--line); }
 .review-status { display: grid; width: 32px; height: 32px; place-items: center; border-radius: 9px; background: #daf2e7; color: #087649; font-size: .7rem; font-weight: 850; }
-.review-status:not([data-state="gemini"]) { background: #fff0df; color: #a54a00; }
+.review-status:not([data-state="gemini"]):not([data-state="ai"]) { background: #fff0df; color: #a54a00; }
 .review-main strong, .review-main small, .review-score strong, .review-score small, .review-cost strong, .review-cost small { display: block; }
 .review-main small, .review-score small, .review-cost small, .review-row time { margin-top: 4px; color: var(--muted); font-size: .67rem; }
 .review-score strong { font-size: 1.35rem; }

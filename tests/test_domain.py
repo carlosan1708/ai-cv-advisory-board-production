@@ -52,3 +52,18 @@ def test_empty_job_is_safe() -> None:
     result = MatchPolicy().assess("EXPERIENCE", "")
     assert result.score <= 20
     assert result.band == "weak"
+
+
+def test_matching_uses_whole_words_not_substrings() -> None:
+    cv = "EXPERIENCE\nJavaScript developer on Linux who maintained trusted apps"
+    result = MatchPolicy().assess(cv, "Java UX Rust AI")
+    assert set(result.gaps) == {"java", "ux", "rust", "ai"}
+
+
+def test_matching_recognises_common_variants() -> None:
+    cv = (
+        "EXPERIENCE\n- Designed secure REST services.\n"
+        "- Led delivery and mentored five engineers.\n- Ran k8s on GCP."
+    )
+    result = MatchPolicy().assess(cv, "security leadership kubernetes google cloud")
+    assert result.gaps == []

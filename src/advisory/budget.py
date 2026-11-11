@@ -14,10 +14,10 @@ class BudgetExceededError(RuntimeError):
 
 @dataclass(frozen=True)
 class Pricing:
-    model: str = "gemini-2.5-flash"
-    version: str = "2026-08-09"
-    input_micro_usd_per_million: int = 300_000
-    output_micro_usd_per_million: int = 2_500_000
+    model: str = "gpt-6-luna"
+    version: str = "2026-11-11"
+    input_micro_usd_per_million: int = 100_000
+    output_micro_usd_per_million: int = 500_000
 
     def cost(self, input_tokens: int, output_tokens: int) -> int:
         input_cost = ceil(input_tokens * self.input_micro_usd_per_million / 1_000_000)

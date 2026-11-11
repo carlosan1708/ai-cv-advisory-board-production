@@ -116,8 +116,8 @@ def test_workspace_archive_clears_active_data_and_remains_viewable() -> None:
 
 
 def test_pricing_uses_integer_micro_dollars() -> None:
-    assert Pricing().cost(1_000_000, 1_000_000) == 2_800_000
-    assert Pricing().cost(1, 1) == 4
+    assert Pricing().cost(1_000_000, 1_000_000) == 600_000
+    assert Pricing().cost(1, 1) == 2
 
 
 def test_budget_reserve_reconcile_release_and_cap() -> None:

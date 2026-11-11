@@ -14,7 +14,7 @@ A production-oriented career platform where a selectable panel of AI specialists
 
 ![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688?logo=fastapi&logoColor=white)
-![Gemini](https://img.shields.io/badge/Gemini-2.5_Flash-8E75B2?logo=googlegemini&logoColor=white)
+![OpenAI](https://img.shields.io/badge/OpenAI-GPT--6_Luna-412991?logo=openai&logoColor=white)
 ![Cloud Run](https://img.shields.io/badge/Google_Cloud-Cloud_Run-4285F4?logo=googlecloud&logoColor=white)
 ![Firestore](https://img.shields.io/badge/Data-Firestore-FFCA28?logo=firebase&logoColor=black)
 ![Playwright](https://img.shields.io/badge/Tests-Playwright-2EAD33?logo=playwright&logoColor=white)
@@ -27,11 +27,11 @@ A production-oriented career platform where a selectable panel of AI specialists
 
 The interesting engineering here is the trust boundary around the AI, not a generic prompt-to-text form:
 
-- **User-composed advisory board** — the user selects up to three specialists. Their briefs are included in one bounded Gemini request, and the report contains one grounded finding per selected advisor ([`advisors.py`](src/advisory/advisors.py), [`ai.py`](src/advisory/ai.py)).
-- **Canonical deterministic evidence layer** — a versioned scorer extracts role requirements and maps them to direct CV evidence before model prose is shown. If Gemini is unavailable or a budget is exhausted, the evidence review still completes without pretending the fallback is AI-generated ([`domain.py`](src/advisory/domain.py), [`service.py`](src/advisory/service.py)).
-- **Strict structured output** — Gemini 2.5 Flash returns a typed review contract with bounded output and thinking disabled. Model output is validated, escaped, and never allowed to create unsupported candidate claims.
+- **User-composed advisory board** — the user selects up to three specialists. Their briefs are included in one bounded OpenAI request, and the report contains one grounded finding per selected advisor ([`advisors.py`](src/advisory/advisors.py), [`ai.py`](src/advisory/ai.py)).
+- **Canonical deterministic evidence layer** — a versioned scorer extracts role requirements and maps them to direct CV evidence before model prose is shown. If the model is unavailable or a budget is exhausted, the evidence review still completes without pretending the fallback is AI-generated ([`domain.py`](src/advisory/domain.py), [`service.py`](src/advisory/service.py)).
+- **Strict structured output** — OpenAI returns a strict JSON-schema review contract with bounded output and low reasoning effort. CV and job text are passed as delimited data, never as instructions; output is validated, escaped, and every advisor quote is checked against the CV before it is shown.
 - **Hardened document and URL ingestion** — PDF/TXT uploads are bounded by bytes, pages, and extracted characters. Job-link fetching permits only public HTTPS destinations, revalidates redirects and DNS results, checks the connected peer, limits response size, and falls back to manual paste ([`ingestion.py`](src/advisory/ingestion.py)).
-- **Atomic cost controls** — every model request reserves its maximum possible cost in Firestore before reaching Vertex AI, then reconciles against actual token usage. Separate ledgers enforce the anonymous pool, approved-member allowance, and project emergency ceiling ([`budget.py`](src/advisory/budget.py), [`google_persistence.py`](src/advisory/google_persistence.py)).
+- **Atomic cost controls** — every model request reserves its maximum possible cost in Firestore before reaching OpenAI, then reconciles against actual token usage. Separate ledgers enforce the anonymous pool, approved-member allowance, and project emergency ceiling ([`budget.py`](src/advisory/budget.py), [`google_persistence.py`](src/advisory/google_persistence.py)).
 - **Private, immutable career assets** — CV versions are independent records. An application stores the exact version used, while edits create a new version instead of silently changing historical evidence.
 - **Privacy-safe AI operations** — the administrator sees usage, status, model, advisor composition, tokens, estimated cost, and latency. CV text, job text, prompts, and generated prose are deliberately excluded from the audit store ([`ai_audit.py`](src/advisory/ai_audit.py)).
 - **Browser-level security** — verified Google identity, owner-scoped records, administrator-controlled access, same-origin write checks, HTTP-only sessions, CSP, HSTS, no-store private responses, rate limits, and structured abuse signals protect the public Cloud Run service.
@@ -43,7 +43,7 @@ CV upload + job URL (or pasted description)
   → bounded document parsing + SSRF-safe job retrieval
   → deterministic requirement/evidence cross-check
   → selected specialist briefs
-  → one Gemini structured review (or clearly labelled fallback)
+  → one OpenAI structured review (or clearly labelled rule-based fallback)
   → grounded panel report + safe edits + interview preparation
 ```
 
@@ -97,7 +97,7 @@ The capture scenarios, privacy rules, and media constraints are documented in [S
 | Identity | Google ID-token verification + hardened HTTP-only application session |
 | Database | Firestore for owner-scoped career records, budgets, access, and audit metadata |
 | Files | Private Cloud Storage objects for immutable CV bytes |
-| AI | Vertex AI + Gemini 2.5 Flash with strict structured output |
+| AI | OpenAI Chat Completions (`gpt-6-luna` by default) with strict JSON-schema output |
 | Runtime | Docker on Google Cloud Run |
 | Tests | pytest, coverage, offline evaluations, and Playwright E2E |
 
@@ -150,7 +150,7 @@ Four complementary layers keep the AI feature testable without paid services:
 - **Deterministic evaluations** — synthetic compatible, partial, incompatible, and adversarial CV/job pairs in [`evals/cases.json`](evals/cases.json), run through a versioned offline scorer.
 - **Playwright E2E** — real browser flows for the welcome choice, free review, panel composition, dashboard, CV library, archive history, administrator view, recovery states, mobile layout, and clean console output.
 
-No test contacts Gemini, Firestore, Cloud Storage, or a production identity provider.
+No test contacts OpenAI, Firestore, Cloud Storage, or a production identity provider.
 
 ---
 
@@ -168,13 +168,13 @@ Browser
 FastAPI web adapter
   ├─ CV parser + SSRF-safe job fetcher
   ├─ Deterministic assessment service
-  ├─ Gemini review adapters
+  ├─ OpenAI review adapters
   ├─ Identity, access, rate, and budget guards
   └─ Privacy-safe logging and AI audit events
              │
              ├─ Firestore (records, access, budgets, audit metadata)
              ├─ Cloud Storage (private immutable CV files)
-             └─ Vertex AI (Gemini 2.5 Flash)
+             └─ OpenAI API (key from Secret Manager)
 ```
 
 ```text
@@ -182,7 +182,7 @@ src/advisory/
   web.py                  # Routes, sessions, HTTP security, dependency wiring
   service.py              # Deterministic CV–job assessment orchestration
   domain.py               # Versioned evidence scoring and typed results
-  ai.py                   # Structured Gemini adapters and fallback behavior
+  ai.py                   # Structured OpenAI adapters and rule-based fallback panel
   advisors.py             # Selectable specialist catalog and board rules
   ingestion.py            # Bounded CV parsing and hardened job retrieval
   career.py               # Application, CV-version, and archive domain models
@@ -196,7 +196,7 @@ src/advisory/
   static/                 # Route-specific CSS and JavaScript
 ```
 
-The domain and service layers do not depend on FastAPI, the browser, Google Cloud, or Gemini. Production adapters implement the same contracts as the deterministic in-memory test adapters.
+The domain and service layers do not depend on FastAPI, the browser, Google Cloud, or OpenAI. Production adapters implement the same contracts as the deterministic in-memory test adapters.
 
 ---
 
@@ -222,7 +222,7 @@ See the complete [`threat model`](docs/THREAT_MODEL.md) and [`operations guide`]
 - **Region:** `us-central1`
 - **Health endpoint:** [`/api/health`](https://ai-cv-advisory-board-production-142795288331.us-central1.run.app/api/health)
 
-The service is stateless, listens on `$PORT`, and can scale to zero. Firestore and Cloud Storage hold durable private state; Vertex AI provides the model boundary.
+The service is stateless, listens on `$PORT`, and can scale to zero. Firestore and Cloud Storage hold durable private state; the OpenAI API provides the model boundary.
 
 ---
 

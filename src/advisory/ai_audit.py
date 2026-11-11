@@ -10,7 +10,8 @@ from pydantic import BaseModel, Field
 AuditTier = Literal["anonymous", "approved"]
 AuditReviewType = Literal["job_match", "application", "cv"]
 AuditStatus = Literal[
-    "gemini",
+    "ai",
+    "gemini",  # legacy records written before the OpenAI migration
     "fallback",
     "budget_limited",
     "rate_limited",

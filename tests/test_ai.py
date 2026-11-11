@@ -3,12 +3,15 @@ from types import SimpleNamespace
 import pytest
 
 from advisory.ai import (
+    AiProviderError,
     BudgetedAiService,
     BudgetedCvService,
     DeterministicAiReviewer,
     DeterministicCvReviewer,
     EvidenceReview,
-    GeminiAiReviewer,
+    OpenAiReviewer,
+    OpenAiStructuredClient,
+    verified_evidence,
 )
 from advisory.budget import BudgetExceededError, InMemoryBudgetLedger, Pricing
 
@@ -18,7 +21,7 @@ def test_deterministic_reviewer_is_bounded_and_grounded() -> None:
         "Built Python platform services", "Python Kubernetes platform leadership"
     )
     assert 0 <= review.fit_score <= 100
-    assert "python" in review.supported_strengths
+    assert any(item.startswith("python:") for item in review.supported_strengths)
     assert "kubernetes" in review.evidence_gaps
     assert input_tokens == output_tokens == 0
 
@@ -68,7 +71,36 @@ def test_budgeted_ai_service_rejects_before_provider_when_cap_is_too_small() -> 
         BudgetedAiService(UnexpectedReviewer(), InMemoryBudgetLedger(100)).review("user", "CV", "JOB")
 
 
-def test_gemini_adapter_requests_strict_bounded_json() -> None:
+def _fake_openai(  # type: ignore[no-untyped-def]
+    payload: str, captured: dict[str, object], *, finish_reason: str = "stop", refusal: str | None = None
+):
+    class Completions:
+        def create(self, **kwargs):  # type: ignore[no-untyped-def]
+            captured.update(kwargs)
+            return SimpleNamespace(
+                choices=[
+                    SimpleNamespace(
+                        finish_reason=finish_reason,
+                        message=SimpleNamespace(content=payload, refusal=refusal),
+                    )
+                ],
+                usage=SimpleNamespace(prompt_tokens=500, completion_tokens=100),
+            )
+
+    return SimpleNamespace(chat=SimpleNamespace(completions=Completions()))
+
+
+def _client(payload: str, captured: dict[str, object], **kwargs: object) -> OpenAiStructuredClient:
+    return OpenAiStructuredClient(
+        api_key="test",
+        model="gpt-6-luna",
+        reasoning_effort="low",
+        max_output_tokens=6_000,
+        client=_fake_openai(payload, captured, **kwargs),  # type: ignore[arg-type]
+    )
+
+
+def test_openai_adapter_requests_strict_json_schema() -> None:
     captured: dict[str, object] = {}
     expected = EvidenceReview(
         fit_score=70,
@@ -77,64 +109,88 @@ def test_gemini_adapter_requests_strict_bounded_json() -> None:
         evidence_gaps=["Terraform"],
         next_actions=["Prepare an example"],
     )
-
-    class Models:
-        def generate_content(self, **kwargs):  # type: ignore[no-untyped-def]
-            captured.update(kwargs)
-            return SimpleNamespace(
-                parsed=expected,
-                text=expected.model_dump_json(),
-                usage_metadata=SimpleNamespace(
-                    prompt_token_count=500,
-                    candidates_token_count=80,
-                    thoughts_token_count=20,
-                ),
-            )
-
-    reviewer = GeminiAiReviewer.__new__(GeminiAiReviewer)
-    reviewer.client = SimpleNamespace(models=Models())
-    reviewer.model = "gemini-2.5-flash"
+    reviewer = OpenAiReviewer(_client(expected.model_dump_json(), captured))
     review, input_tokens, output_tokens = reviewer.review("CV evidence", "Job needs")
     assert review == expected
     assert (input_tokens, output_tokens) == (500, 100)
-    assert captured["model"] == "gemini-2.5-flash"
-    config = captured["config"]
-    assert config.max_output_tokens == 2_048  # type: ignore[union-attr]
-    assert config.response_mime_type == "application/json"  # type: ignore[union-attr]
+    assert captured["model"] == "gpt-6-luna"
+    assert captured["max_completion_tokens"] == 6_000
+    assert captured["reasoning_effort"] == "low"
+    response_format = captured["response_format"]
+    assert response_format["type"] == "json_schema"  # type: ignore[index]
+    assert response_format["json_schema"]["strict"] is True  # type: ignore[index]
+    schema = response_format["json_schema"]["schema"]  # type: ignore[index]
+    assert schema["additionalProperties"] is False
+    assert set(schema["required"]) == set(schema["properties"])
 
 
-def test_gemini_board_uses_only_selected_advisor_briefs() -> None:
+def test_openai_board_uses_only_selected_advisors_and_isolates_documents() -> None:
     captured: dict[str, object] = {}
-    expected = EvidenceReview(
+    payload = EvidenceReview(
         fit_score=72,
         summary="Grounded board consensus",
         supported_strengths=["Python delivery"],
         evidence_gaps=["FinOps"],
         next_actions=["Quantify impact"],
-    )
-
-    class Models:
-        def generate_content(self, **kwargs):  # type: ignore[no-untyped-def]
-            captured.update(kwargs)
-            return SimpleNamespace(
-                parsed=expected,
-                text=expected.model_dump_json(),
-                usage_metadata=SimpleNamespace(
-                    prompt_token_count=400,
-                    candidates_token_count=100,
-                    thoughts_token_count=0,
-                ),
-            )
-
-    reviewer = GeminiAiReviewer.__new__(GeminiAiReviewer)
-    reviewer.client = SimpleNamespace(models=Models())
-    reviewer.model = "gemini-2.5-flash"
+    ).model_dump_json()
+    reviewer = OpenAiReviewer(_client(payload, captured))
     review, _, _ = reviewer.review("CV", "JOB", ["executive", "impact", "unknown"])
-    prompt = str(captured["contents"])
-    assert "executive: Executive Story Editor" in prompt
-    assert "impact: Impact & ROI Reviewer" in prompt
-    assert "Technical Recruiter" not in prompt
+    messages = captured["messages"]
+    instructions = messages[0]["content"]  # type: ignore[index]
+    assert messages[0]["role"] == "developer"  # type: ignore[index]
+    assert "executive: Executive Story Editor" in instructions
+    assert "impact: Impact & ROI Reviewer" in instructions
+    assert "Technical Recruiter" not in instructions
+    assert "<cv>\n" not in instructions
+    assert messages[1]["content"].startswith("<cv>\nCV\n</cv>")  # type: ignore[index]
     assert [finding.advisor_id for finding in review.advisor_findings] == ["executive", "impact"]
+
+
+def test_openai_adapter_raises_on_refusal_and_truncation() -> None:
+    with pytest.raises(AiProviderError):
+        OpenAiReviewer(_client("{}", {}, refusal="no")).review("CV", "JOB")
+    with pytest.raises(AiProviderError):
+        OpenAiReviewer(_client("{}", {}, finish_reason="length")).review("CV", "JOB")
+
+
+def test_unverifiable_quotes_are_removed_from_advisor_findings() -> None:
+    review = EvidenceReview.model_validate(
+        {
+            "fit_score": 60,
+            "summary": "s",
+            "supported_strengths": [],
+            "evidence_gaps": [],
+            "next_actions": [],
+            "advisor_findings": [
+                {
+                    "advisor_id": "technical",
+                    "headline": "h",
+                    "finding": "f",
+                    "evidence": ['"Built   Python APIs"', "Led a team of 40 engineers"],
+                    "recommendation": "r",
+                }
+            ],
+        }
+    )
+    checked = verified_evidence(review, "EXPERIENCE\n- Built Python APIs on Google Cloud.")
+    assert checked.advisor_findings[0].evidence == ['"Built   Python APIs"']
+
+
+def test_deterministic_panel_gives_distinct_grounded_findings() -> None:
+    cv = (
+        "EXPERIENCE\n- Built Python APIs serving 2 million users.\n"
+        "- Led a team of 5 engineers and mentored two juniors.\n"
+        "SKILLS\nPython, SQL\nEDUCATION\nBSc"
+    )
+    review, _, _ = DeterministicAiReviewer().review(
+        cv, "Python SQL Kubernetes leadership", ["recruiter", "executive", "impact"]
+    )
+    headlines = [finding.headline for finding in review.advisor_findings]
+    assert len(set(headlines)) == 3
+    for finding in review.advisor_findings:
+        for quote in finding.evidence:
+            assert quote in cv
+    assert all("need" not in question.split() for question in review.interview_questions)
 
 
 def test_ai_review_truncates_provider_output_to_safe_schema_bounds() -> None:

@@ -30,6 +30,7 @@ class CareerRepository(Protocol):
     def update_application(
         self, owner_id: str, application_id: str, payload: ApplicationUpdate
     ) -> Application: ...
+    def delete_application(self, owner_id: str, application_id: str) -> None: ...
     def list_cv_versions(self, owner_id: str) -> list[CvVersion]: ...
     def get_cv_version(self, owner_id: str, cv_version_id: str) -> CvVersion: ...
     def create_cv_version(self, version: CvVersion, content: bytes) -> CvVersion: ...
@@ -98,6 +99,14 @@ class InMemoryCareerRepository:
             updated = current.model_copy(update={**changes, "updated_at": datetime.now(UTC)})
             self._applications[key] = updated
             return updated.model_copy(deep=True)
+
+    def delete_application(self, owner_id: str, application_id: str) -> None:
+        key = (owner_id, application_id)
+        with self._lock:
+            current = self._applications.get(key)
+            if current is None or current.archive_id is not None:
+                raise NotFoundError("Application not found")
+            del self._applications[key]
 
     def list_cv_versions(self, owner_id: str) -> list[CvVersion]:
         with self._lock:

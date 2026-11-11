@@ -76,7 +76,7 @@
     data.recent_reviews.forEach((review) => {
       const row = document.querySelector("#review-row").content.firstElementChild.cloneNode(true);
       const status = row.querySelector("[data-review-status]");
-      status.textContent = review.status === "gemini" ? "AI" : "!";
+      status.textContent = ["ai", "gemini"].includes(review.status) ? "AI" : "!";
       status.dataset.state = review.status;
       row.querySelector("[data-review-title]").textContent = typeLabels[review.review_type] || "AI review";
       const panel = review.advisor_ids.length ? ` · ${review.advisor_ids.join(", ")}` : "";

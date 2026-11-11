@@ -5,7 +5,7 @@
 - CV bytes, extracted text, contact information, and filenames.
 - Job URLs, descriptions, and the candidate's job-search intentions.
 - Integrity of findings and recommendations.
-- Google identity, Firestore records, private Cloud Storage objects, and Vertex AI usage.
+- Google identity, Firestore records, private Cloud Storage objects, and OpenAI API usage (key held in Secret Manager).
 
 ## Trust boundaries
 

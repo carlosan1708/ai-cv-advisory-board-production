@@ -95,6 +95,10 @@ class GoogleCareerRepository:
         )
         return updated
 
+    def delete_application(self, owner_id: str, application_id: str) -> None:
+        self.get_application(owner_id, application_id)
+        self._user(owner_id).collection("applications").document(application_id).delete()
+
     def list_cv_versions(self, owner_id: str) -> list[CvVersion]:
         documents = self._user(owner_id).collection("cv_versions").stream()
         versions = [

@@ -23,7 +23,7 @@ def test_home_explains_product_and_board() -> None:
     assert "Choose your own 1–3 specialist advisory panel" in response.text
     assert "Shared $5 monthly AI pool" in response.text
     assert "Each approved member has a $10 monthly AI allowance" not in response.text
-    assert 'href="/static/app.css?v=8"' in response.text
+    assert 'href="/static/app.css?v=12"' in response.text
 
 
 def test_tracker_page_has_board_funnel_and_fast_add() -> None:
@@ -212,8 +212,8 @@ def test_admin_usage_is_private_and_exposes_only_operational_review_metadata(
             owner_id="anonymous-free-tier",
             access_tier="anonymous",
             review_type="job_match",
-            status="gemini",
-            model="gemini-2.5-flash",
+            status="ai",
+            model="gpt-6-luna",
             advisor_ids=["recruiter", "hiring_manager", "technical"],
             score=71,
             input_tokens=200,
@@ -373,7 +373,7 @@ def test_demo_renders_complete_board_finding() -> None:
     assert response.status_code == 200
     assert 'data-testid="results"' in response.text
     assert "At a glance" in response.text
-    assert "How the evidence match is calculated" in response.text
+    assert "How the rule-based evidence score is calculated" in response.text
     assert "Your panel, one decision" in response.text
     assert "Board confidence" not in response.text
     assert response.text.count('data-testid="score"') == 1
@@ -583,3 +583,36 @@ def test_api_contract() -> None:
 def test_api_rejects_blank_input() -> None:
     response = client.post("/api/assessments", data={"cv_text": " ", "job_text": "Python"})
     assert response.status_code == 422
+
+
+def test_application_can_be_edited_and_deleted_by_owner_only() -> None:
+    web.career_repository.clear()
+    headers = {"x-advisory-user": "alice"}
+    created = client.post(
+        "/api/applications", headers=headers, json={"company": "Acme", "role": "AI Engineer"}
+    )
+    application_id = created.json()["id"]
+    edited = client.patch(
+        f"/api/applications/{application_id}",
+        headers=headers,
+        json={"notes": "Recruiter call booked", "next_action_due": "2026-11-20", "applied_date": None},
+    )
+    assert edited.status_code == 200
+    assert edited.json()["next_action_due"] == "2026-11-20"
+    other_user = {"x-advisory-user": "bob"}
+    assert client.delete(f"/api/applications/{application_id}", headers=other_user).status_code == 404
+    assert client.delete(f"/api/applications/{application_id}", headers=headers).status_code == 204
+    assert client.get("/api/applications", headers=headers).json() == []
+
+
+def test_production_refuses_development_identity() -> None:
+    from pydantic import ValidationError
+
+    from advisory.settings import Settings
+
+    with pytest.raises(ValidationError):
+        Settings(environment="production", auth_mode="development", openai_api_key="sk-test")
+    with pytest.raises(ValidationError):
+        Settings(environment="production", auth_mode="google", openai_api_key="")
+    valid = Settings(environment="production", auth_mode="google", openai_api_key="sk-test")
+    assert valid.auth_mode == "google"

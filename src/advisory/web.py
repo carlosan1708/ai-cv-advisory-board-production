@@ -4,6 +4,7 @@ import hashlib
 import json
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
+from functools import lru_cache
 from pathlib import Path
 from typing import Protocol, cast
 
@@ -38,10 +39,11 @@ from advisory.ai import (
     DeterministicAiReviewer,
     DeterministicCvReviewer,
     EvidenceReview,
-    GeminiAiReviewer,
-    GeminiCvReviewer,
     MeteredCvReview,
     MeteredEvidenceReview,
+    OpenAiCvReviewer,
+    OpenAiReviewer,
+    OpenAiStructuredClient,
 )
 from advisory.ai_audit import (
     AiAuditEvent,
@@ -50,7 +52,7 @@ from advisory.ai_audit import (
     InMemoryAiAuditRepository,
 )
 from advisory.auth import IdentityVerifier, UserIdentity
-from advisory.budget import BudgetExceededError, BudgetLedger, InMemoryBudgetLedger
+from advisory.budget import BudgetExceededError, BudgetLedger, InMemoryBudgetLedger, Pricing
 from advisory.career import ApplicationCreate, ApplicationUpdate
 from advisory.career_repository import (
     CareerRepository,
@@ -202,50 +204,63 @@ def tracker_service() -> TrackerService:
     return TrackerService(career_repository, cv_document_parser())
 
 
+def ai_pricing() -> Pricing:
+    return Pricing(
+        model=settings.openai_model,
+        version="settings",
+        input_micro_usd_per_million=settings.openai_input_micro_usd_per_million,
+        output_micro_usd_per_million=settings.openai_output_micro_usd_per_million,
+    )
+
+
+@lru_cache(maxsize=1)
+def openai_client() -> OpenAiStructuredClient:
+    return OpenAiStructuredClient(
+        api_key=settings.openai_api_key.get_secret_value(),
+        model=settings.openai_model,
+        reasoning_effort=settings.openai_reasoning_effort,
+        max_output_tokens=settings.ai_max_output_tokens,
+    )
+
+
 def ai_reviewer() -> AiReviewer:
-    reviewer: AiReviewer
     if settings.environment == "production":
-        reviewer = GeminiAiReviewer(
-            project=settings.gcp_project,
-            location=settings.gcp_location,
-            model=settings.gemini_model,
-        )
-    else:
-        reviewer = DeterministicAiReviewer()
-    return reviewer
+        return OpenAiReviewer(openai_client())
+    return DeterministicAiReviewer()
+
+
+def _board_service(ledger: BudgetLedger) -> BudgetedAiService:
+    return BudgetedAiService(
+        ai_reviewer(),
+        ledger,
+        pricing=ai_pricing(),
+        max_input_tokens=settings.ai_max_input_tokens,
+        max_output_tokens=settings.ai_max_output_tokens,
+        emergency_ledger=project_budget_ledger,
+        emergency_owner_id=PROJECT_BUDGET_OWNER,
+    )
 
 
 def free_ai_service() -> BudgetedAiService:
-    return BudgetedAiService(
-        ai_reviewer(),
-        free_budget_ledger,
-        emergency_ledger=project_budget_ledger,
-        emergency_owner_id=PROJECT_BUDGET_OWNER,
-    )
+    return _board_service(free_budget_ledger)
 
 
 def member_ai_service() -> BudgetedAiService:
-    return BudgetedAiService(
-        ai_reviewer(),
-        member_budget_ledger,
-        emergency_ledger=project_budget_ledger,
-        emergency_owner_id=PROJECT_BUDGET_OWNER,
-    )
+    return _board_service(member_budget_ledger)
 
 
 def member_cv_service() -> BudgetedCvService:
     reviewer: CvReviewer
     if settings.environment == "production":
-        reviewer = GeminiCvReviewer(
-            project=settings.gcp_project,
-            location=settings.gcp_location,
-            model=settings.gemini_model,
-        )
+        reviewer = OpenAiCvReviewer(openai_client())
     else:
         reviewer = DeterministicCvReviewer()
     return BudgetedCvService(
         reviewer,
         member_budget_ledger,
+        pricing=ai_pricing(),
+        max_input_tokens=settings.ai_max_input_tokens,
+        max_output_tokens=settings.ai_max_output_tokens,
         emergency_ledger=project_budget_ledger,
         emergency_owner_id=PROJECT_BUDGET_OWNER,
     )
@@ -354,6 +369,10 @@ def render(
         list(DEFAULT_ADVISOR_IDS) if advisor_ids is None else advisor_ids
     )
     assessment_json = json.dumps(assessment.model_dump(), indent=2) if assessment else ""
+    use_panel_score = ai_review is not None and not ai_degraded and not ai_notice
+    headline_score = (
+        ai_review.fit_score if use_panel_score and ai_review else assessment.score if assessment else 0
+    )
     return templates.TemplateResponse(
         request=request,
         name="index.html",
@@ -367,6 +386,9 @@ def render(
             "run_id": run_id,
             "assessment": assessment,
             "assessment_json": assessment_json,
+            "headline_score": headline_score,
+            "headline_band": _score_band(headline_score),
+            "headline_source": "panel" if use_panel_score else "evidence",
             "ai_review": ai_review,
             "ai_notice": ai_notice,
             "ai_degraded": ai_degraded,
@@ -406,6 +428,7 @@ def tracker(request: Request) -> HTMLResponse:
         name="tracker.html",
         context={
             "ai_limit_dollars": settings.ai_monthly_limit_micro_usd / 1_000_000,
+            "ai_model": settings.openai_model,
             "auth_mode": settings.auth_mode,
             "google_oauth_client_id": settings.google_oauth_client_id,
         },
@@ -537,7 +560,7 @@ def admin_ai_usage(request: Request) -> dict[str, object]:
     )
     return {
         "month": current_month,
-        "model": settings.gemini_model,
+        "model": settings.openai_model,
         "privacy_note": "Operational metadata only. CV text, job text, and generated prose are not stored.",
         "free": _budget_payload(free_budget_ledger, "anonymous-free-tier"),
         "project": _budget_payload(project_budget_ledger, PROJECT_BUDGET_OWNER),
@@ -589,6 +612,17 @@ def update_application(
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     emit("application.updated", user_id=owner_id(request), application_id=item.id, status=item.status)
     return item.model_dump(mode="json")
+
+
+@app.delete("/api/applications/{application_id}", status_code=204)
+def delete_application(request: Request, application_id: str) -> Response:
+    owner = owner_id(request)
+    try:
+        career_repository.delete_application(owner, application_id)
+    except NotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    emit("application.deleted", user_id=owner, application_id=application_id)
+    return Response(status_code=204)
 
 
 @app.get("/api/workspace-archives")
@@ -737,7 +771,7 @@ async def standalone_cv_review(request: Request, cv_version_id: str) -> dict[str
                 access_tier="approved",
                 review_type="cv",
                 status="budget_limited",
-                model=settings.gemini_model,
+                model=settings.openai_model,
             )
         )
         raise HTTPException(status_code=429, detail=str(exc)) from exc
@@ -748,7 +782,7 @@ async def standalone_cv_review(request: Request, cv_version_id: str) -> dict[str
                 access_tier="approved",
                 review_type="cv",
                 status="rate_limited",
-                model=settings.gemini_model,
+                model=settings.openai_model,
             )
         )
         raise HTTPException(status_code=429, detail=str(exc)) from exc
@@ -759,7 +793,7 @@ async def standalone_cv_review(request: Request, cv_version_id: str) -> dict[str
                 access_tier="approved",
                 review_type="cv",
                 status="provider_error",
-                model=settings.gemini_model,
+                model=settings.openai_model,
             )
         )
         raise
@@ -768,10 +802,10 @@ async def standalone_cv_review(request: Request, cv_version_id: str) -> dict[str
             owner_id=owner,
             access_tier="approved",
             review_type="cv",
-            status="gemini",
+            status="ai",
             score=review.quality_score,
             band=_score_band(review.quality_score),
-            model=usage.model if usage else settings.gemini_model,
+            model=usage.model if usage else settings.openai_model,
             input_tokens=usage.input_tokens if usage else 0,
             output_tokens=usage.output_tokens if usage else 0,
             actual_micro_usd=usage.actual_micro_usd if usage else 0,
@@ -841,7 +875,7 @@ async def application_ai_review(
                 access_tier="approved",
                 review_type="application",
                 status="budget_limited",
-                model=settings.gemini_model,
+                model=settings.openai_model,
             )
         )
         raise HTTPException(status_code=429, detail=str(exc)) from exc
@@ -852,7 +886,7 @@ async def application_ai_review(
                 access_tier="approved",
                 review_type="application",
                 status="rate_limited",
-                model=settings.gemini_model,
+                model=settings.openai_model,
             )
         )
         raise HTTPException(status_code=429, detail=str(exc)) from exc
@@ -863,7 +897,7 @@ async def application_ai_review(
                 access_tier="approved",
                 review_type="application",
                 status="provider_error",
-                model=settings.gemini_model,
+                model=settings.openai_model,
             )
         )
         raise
@@ -872,10 +906,10 @@ async def application_ai_review(
             owner_id=owner,
             access_tier="approved",
             review_type="application",
-            status="gemini",
+            status="ai",
             score=review.fit_score,
             band=_score_band(review.fit_score),
-            model=usage.model if usage else settings.gemini_model,
+            model=usage.model if usage else settings.openai_model,
             input_tokens=usage.input_tokens if usage else 0,
             output_tokens=usage.output_tokens if usage else 0,
             actual_micro_usd=usage.actual_micro_usd if usage else 0,
@@ -910,7 +944,7 @@ def demo(request: Request) -> HTMLResponse:
         ai_review=ai_review,
         ai_notice=(
             "This sample demonstrates the report without spending the shared free AI pool. "
-            "A real review uses the selected board in one Gemini call."
+            "A real review sends your selected board to the AI model in one call."
         ),
         advisor_ids=list(DEFAULT_ADVISOR_IDS),
     )
@@ -1037,7 +1071,7 @@ async def analyze(
     ai_review: EvidenceReview | None = None
     ai_notice = ""
     ai_degraded = False
-    audit_status: AuditStatus = "gemini"
+    audit_status: AuditStatus = "ai"
     usage: AiUsage | None = None
     try:
         _enforce_ai_rate(
@@ -1061,7 +1095,7 @@ async def analyze(
             "The shared free AI pool has reached its monthly $5 limit. "
             "The evidence review below still works without a model call."
         )
-        emit("gemini.free_pool.exhausted")
+        emit("ai.free_pool.exhausted")
     except RateLimitExceededError:
         audit_status = "rate_limited"
         ai_degraded = True
@@ -1076,9 +1110,9 @@ async def analyze(
             resolved_cv, resolved_job, selected_advisor_ids
         )
         ai_notice = (
-            "Gemini is temporarily unavailable. The evidence review below was completed without a model call."
+            "The AI model is temporarily unavailable. The review below was completed without a model call."
         )
-        emit("gemini.free_pool.fallback", error_type=type(exc).__name__)
+        emit("ai.free_pool.fallback", error_type=type(exc).__name__)
     _record_ai_audit(
         AiAuditEvent.new(
             owner_id="anonymous-free-tier",
@@ -1086,9 +1120,9 @@ async def analyze(
             review_type="job_match",
             status=audit_status,
             advisor_ids=selected_advisor_ids,
-            score=assessment.score,
-            band=assessment.band,
-            model=usage.model if usage else settings.gemini_model,
+            score=ai_review.fit_score if ai_review and not ai_degraded else assessment.score,
+            band=_score_band(ai_review.fit_score) if ai_review and not ai_degraded else assessment.band,
+            model=usage.model if usage else settings.openai_model,
             input_tokens=usage.input_tokens if usage else 0,
             output_tokens=usage.output_tokens if usage else 0,
             actual_micro_usd=usage.actual_micro_usd if usage else 0,

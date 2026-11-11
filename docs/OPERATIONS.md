@@ -10,7 +10,8 @@
 - Firestore: owner-scoped applications, CV metadata/extracted text, monthly AI ledgers, and metadata-only
   AI audit events
 - Cloud Storage: private immutable CV bytes in `users/{subject}/cv-versions/...`
-- Vertex AI model: `gemini-2.5-flash`, global endpoint, thinking disabled
+- AI model: OpenAI `gpt-6-luna` via Chat Completions, strict JSON-schema output, `reasoning_effort=low`
+  (model, effort, and per-token prices are configurable; keep prices in sync with OpenAI's pricing page)
 - Identity: Google ID token; stable `sub` claim is the owner key
 - AI ceilings: $5/month shared anonymous, $10/month per approved user, and $50/month project-wide
 - Burst guards: 2 anonymous AI attempts/minute/client and 10 approved attempts/minute/user
@@ -22,6 +23,26 @@ Production environment variables:
 - `ADVISORY_AUTH_MODE=google`
 - `ADVISORY_GOOGLE_OAUTH_CLIENT_ID=<web client ID>`
 - `ADVISORY_CV_BUCKET=ai-cv-advisory-board-production-cvs`
+- `OPENAI_API_KEY` mounted from Secret Manager (never a plain env var or a committed file)
+- Optional: `ADVISORY_OPENAI_MODEL`, `ADVISORY_OPENAI_REASONING_EFFORT`,
+  `ADVISORY_OPENAI_INPUT_MICRO_USD_PER_MILLION`, `ADVISORY_OPENAI_OUTPUT_MICRO_USD_PER_MILLION`
+
+The app refuses to start in production unless `ADVISORY_AUTH_MODE=google` and an OpenAI key are set.
+
+### OpenAI key handling
+
+1. Create a dedicated OpenAI project for this service, with its own restricted key and a monthly
+   budget limit in the OpenAI dashboard (a second ceiling behind the app's own ledgers).
+2. Store the key in Secret Manager and grant only the Cloud Run service account
+   `roles/secretmanager.secretAccessor` on that secret:
+
+   ```bash
+   printf '%s' "$KEY" | gcloud secrets create openai-api-key --data-file=-
+   gcloud run services update ai-cv-advisory-board-production --region us-central1 \
+     --set-secrets=OPENAI_API_KEY=openai-api-key:latest
+   ```
+
+3. Rotate the key by adding a new secret version and redeploying; revoke the old key in OpenAI.
 
 ## Structured events
 
@@ -35,10 +56,10 @@ The `advisory` logger emits one-line JSON events:
 | `job.ingestion.failed` | source, error_type | Remote-page recovery rate |
 | `operation.started/finished/failed` | operation, run_id, duration_ms, error_type | Assessment latency and failures |
 | `assessment.completed` | run_id, lengths, score, scoring_version | Scoring throughput and version audit |
-| `application.created/updated` | opaque user/application IDs, status | Pipeline activity |
+| `application.created/updated/deleted` | opaque user/application IDs, status | Pipeline activity |
 | `cv_version.created` | opaque user/version IDs, byte count | Immutable CV creation |
-| `gemini.request.completed` | opaque user ID, model, tokens, micro-USD, duration | AI cost and latency |
-| `gemini.request.failed` | opaque user ID, model | Provider failure rate |
+| `ai.request.completed` / `ai.cv_review.completed` | opaque user ID, model, tokens, micro-USD, duration | AI cost and latency |
+| `ai.request.failed` / `ai.cv_review.failed` | opaque user ID, model | Provider failure rate |
 | `security.access_denied` | route, method, 401/403 status | Authentication/authorization abuse |
 | `security.cross_site_blocked` | route, method, fetch metadata | Cross-site mutation attempts |
 | `security.ai_burst_blocked` | access tier | AI burst guard activations |

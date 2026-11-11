@@ -10,7 +10,10 @@ WORD_RE = re.compile(r"[a-zA-Z][a-zA-Z0-9+#.\-/]{1,}")
 STOPWORDS = frozenset(
     "a an and are as at be by for from has have in is it of on or our that the this to we will with you "
     "your candidate candidates engineering engineer engineers experience experienced job looking need needs "
-    "preferred required requirement requirements role senior strong team teams work working years".split()
+    "preferred required requirement requirements role senior strong team teams work working years "
+    "ability able across based best deliver delivering develop developing ensure environment including join "
+    "knowledge level make must need needs new opportunity plus range responsibilities responsible skills "
+    "solutions using well within".split()
 )
 BOILERPLATE_TERMS = frozenset(
     "about accept account all also apply benefits build business careers code company "
@@ -50,6 +53,40 @@ CURATED_PHRASES = (
     "technical leadership",
     "user research",
 )
+TERM_ALIASES: dict[str, tuple[str, ...]] = {
+    "ai": ("ai", "artificial intelligence", "machine learning", "llm", "generative ai"),
+    "artificial intelligence": ("artificial intelligence", "ai"),
+    "machine learning": ("machine learning", "ml"),
+    "ml": ("ml", "machine learning"),
+    "llm": ("llm", "large language model", "generative ai"),
+    "security": ("security", "secure", "secured", "securing", "cybersecurity"),
+    "cybersecurity": ("cybersecurity", "security"),
+    "leadership": ("leadership", "led", "lead", "leading", "mentored", "mentoring", "managed", "coached"),
+    "mentoring": ("mentoring", "mentored", "mentor", "coached", "coaching"),
+    "coaching": ("coaching", "coached", "mentored", "mentoring"),
+    "testing": ("testing", "tests", "tested", "test automation", "pytest", "jest"),
+    "automated testing": ("automated testing", "automated tests", "test automation"),
+    "kubernetes": ("kubernetes", "k8s", "gke", "eks", "aks"),
+    "google cloud": ("google cloud", "gcp"),
+    "gcp": ("gcp", "google cloud"),
+    "aws": ("aws", "amazon web services"),
+    "azure": ("azure",),
+    "postgresql": ("postgresql", "postgres"),
+    "javascript": ("javascript", "js"),
+    "node": ("node", "node.js", "nodejs"),
+    "golang": ("golang", "go language"),
+    "communication": ("communication", "communicated", "communicating", "presented", "presenting"),
+    "stakeholder": ("stakeholder", "stakeholders"),
+    "ownership": ("ownership", "owned", "owner"),
+    "architecture": ("architecture", "architected", "architectural"),
+    "observability": ("observability", "monitoring", "tracing", "alerting"),
+    "continuous integration": ("continuous integration", "ci/cd", "ci"),
+    "continuous delivery": ("continuous delivery", "continuous deployment", "ci/cd", "cd"),
+    "people management": ("people management", "managed a team", "direct reports", "line manager"),
+    "technical leadership": ("technical leadership", "tech lead", "technical lead"),
+    "user research": ("user research", "usability testing", "user interviews"),
+}
+BULLET_CHARS = " -\u2022*\t"
 SECTIONS = {
     "experience": ("experience", "employment", "work history"),
     "skills": ("skills", "technologies", "technical skills"),
@@ -71,7 +108,7 @@ class ScoreComponents(BaseModel):
 
 class Assessment(BaseModel):
     schema_version: str = "1.0"
-    scoring_version: str = "baseline-1"
+    scoring_version: str = "baseline-2"
     score: int = Field(ge=0, le=100)
     band: str
     components: ScoreComponents
@@ -84,7 +121,7 @@ class Assessment(BaseModel):
 @dataclass(frozen=True)
 class MatchPolicy:
     max_requirements: int = 12
-    scoring_version: ClassVar[str] = "baseline-1"
+    scoring_version: ClassVar[str] = "baseline-2"
 
     @staticmethod
     def tokens(text: str) -> list[str]:
@@ -133,9 +170,20 @@ class MatchPolicy:
         return ranked[: self.max_requirements]
 
     @staticmethod
-    def _evidence(term: str, cv_text: str) -> list[str]:
-        lines = [line.strip() for line in cv_text.splitlines() if line.strip()]
-        return [line[:240] for line in lines if term.lower() in line.lower()][:3]
+    def term_pattern(term: str) -> re.Pattern[str]:
+        """Whole-word match for a requirement or any alias, tolerating plurals and space/hyphen variants."""
+        alternatives = []
+        for alias in TERM_ALIASES.get(term.lower(), (term.lower(),)):
+            parts = [re.escape(part) for part in re.split(r"[\s\-]+", alias) if part]
+            alternatives.append(r"[\s\-]+".join(parts))
+        body = "|".join(sorted(alternatives, key=len, reverse=True))
+        return re.compile(rf"(?<![a-z0-9])(?:{body})(?:s|es)?(?![a-z0-9])", re.IGNORECASE)
+
+    @classmethod
+    def _evidence(cls, term: str, cv_text: str) -> list[str]:
+        pattern = cls.term_pattern(term)
+        lines = [line.strip(BULLET_CHARS) for line in cv_text.splitlines() if line.strip(BULLET_CHARS)]
+        return [line[:240] for line in lines if pattern.search(line)][:3]
 
     def assess(self, cv_text: str, job_text: str) -> Assessment:
         terms = self.extract_requirements(job_text)
