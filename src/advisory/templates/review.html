@@ -4,7 +4,7 @@
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Guided review | AI CV Advisory Board</title>
   <meta name="description" content="Review a saved CV against an application with your advisory board, then improve it with a short interview.">
-  <link rel="stylesheet" href="/static/app.css?v=12"><link rel="stylesheet" href="/static/tracker.css?v=10"><link rel="stylesheet" href="/static/review.css?v=1">
+  <link rel="stylesheet" href="/static/app.css?v=13"><link rel="stylesheet" href="/static/tracker.css?v=10"><link rel="stylesheet" href="/static/review.css?v=2">
   {% if auth_mode == "google" %}<script src="https://accounts.google.com/gsi/client" async defer></script>{% endif %}
 </head>
 <body class="tracker-page guided-review-page">
@@ -133,6 +133,6 @@
   </main>
   <nav class="mobile-workspace-nav" aria-label="Mobile workspace navigation"><a href="/dashboard">Dashboard</a><a class="active" href="/review">Review</a><a href="/cvs">CVs</a></nav>
   <script type="application/json" id="advisors-data">{{ advisors_data | tojson }}</script>
-  <script src="/static/review.js?v=1" defer></script>
+  <script src="/static/review.js?v=2" defer></script>
 </body>
 </html>

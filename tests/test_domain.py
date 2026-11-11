@@ -15,7 +15,24 @@ def test_matching_requires_literal_evidence() -> None:
 
 def test_repeated_job_terms_rank_first() -> None:
     terms = MatchPolicy(max_requirements=2).extract_requirements("Python cloud Python security cloud Python")
-    assert terms == ["python", "cloud"]
+    assert terms == ["python", "security"]
+
+
+def test_common_words_are_not_requirements() -> None:
+    job = (
+        "Building complex workflows for their applications while growing talent. Like building? "
+        "Their growth matters. Building complex workflows. Requirements: Python, LangGraph, AWS. "
+        "Our CEO and HR team offer PTO in the USA."
+    )
+    terms = MatchPolicy().extract_requirements(job)
+    assert terms == ["python", "langgraph", "aws"]
+
+
+def test_evidence_is_a_readable_sentence_when_pdf_text_is_fragmented() -> None:
+    sentence = "Built agentic workflows with LangGraph and RAG on AWS for complex applications."
+    fragmented = "\n".join(("EXPERIENCE " + sentence + " Led a team of four engineers.").split())
+    result = MatchPolicy().assess(fragmented, "LangGraph RAG")
+    assert result.requirements[0].evidence[0] == sentence
 
 
 def test_requirement_extraction_prefers_meaningful_phrases() -> None:

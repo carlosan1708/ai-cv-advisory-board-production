@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>AI Job Match | AI CV Advisory Board</title>
   <meta name="description" content="Compare a CV with a specific job using grounded AI.">
-  <link rel="stylesheet" href="/static/app.css?v=12">
+  <link rel="stylesheet" href="/static/app.css?v=13">
   <script src="/static/app.js?v=11" defer></script>
 </head>
 <body class="workspace-page{% if assessment %} has-results{% endif %}{% if error %} has-error{% endif %}">
@@ -193,8 +193,11 @@
     {% endif %}
 
     {% if assessment %}
-    {% set matched = assessment.requirements | selectattr('matched') | list %}
-    {% set missing = assessment.requirements | rejectattr('matched') | list %}
+    {% set use_ai_ledger = ai_review and not ai_degraded and not ai_notice and ai_review.requirements %}
+    {% set ledger = ai_review.requirements if use_ai_ledger else [] %}
+    {% set matched = (ledger | selectattr('supported') | list) if use_ai_ledger else (assessment.requirements | selectattr('matched') | list) %}
+    {% set missing = (ledger | rejectattr('supported') | list) if use_ai_ledger else (assessment.requirements | rejectattr('matched') | list) %}
+    {% set total_requirements = (ledger | length) if use_ai_ledger else (assessment.requirements | length) %}
     <section class="results" aria-labelledby="decision-title" data-testid="results">
       <section class="decision-card primary-decision" aria-describedby="score-disclaimer">
         <div class="result-score">
@@ -207,13 +210,13 @@
           <span class="overline">At a glance</span>
           {% if headline_band == 'strong' %}
           <h2 id="decision-title">Your CV makes a credible case for this role.</h2>
-          <p>{{ matched | length }} of {{ assessment.requirements | length }} priority requirements have direct support. Use the evidence ledger to strengthen the remaining gaps.</p>
+          <p>{{ matched | length }} of {{ total_requirements }} priority requirements have direct support. Use the evidence ledger to strengthen the remaining gaps.</p>
           {% elif headline_band == 'partial' %}
           <h2 id="decision-title">The fit is promising, but the evidence is uneven.</h2>
-          <p>{{ matched | length }} of {{ assessment.requirements | length }} priority requirements have direct support. Address the highest-value gaps before tailoring the application.</p>
+          <p>{{ matched | length }} of {{ total_requirements }} priority requirements have direct support. Address the highest-value gaps before tailoring the application.</p>
           {% else %}
           <h2 id="decision-title">This role asks for evidence the CV does not yet show.</h2>
-          <p>{{ matched | length }} of {{ assessment.requirements | length }} priority requirements have direct support. Treat missing evidence as a decision point, not permission to invent experience.</p>
+          <p>{{ matched | length }} of {{ total_requirements }} priority requirements have direct support. Treat missing evidence as a decision point, not permission to invent experience.</p>
           {% endif %}
           {% if assessment.recommendations %}<p class="decision-next"><strong>Best next step:</strong> {{ assessment.recommendations[0] }}</p>{% endif %}
           <p class="score-disclaimer" id="score-disclaimer" data-testid="score-disclaimer"><span aria-hidden="true">i</span>{% if headline_source == 'panel' %}The headline score is the AI panel's judgement of how well the CV's evidence fits this job. It is not a prediction of a commercial ATS.{% else %}{{ assessment.warnings[0] }}{% endif %}</p>
@@ -306,8 +309,17 @@
 
       <div class="findings-layout">
         <section class="evidence-ledger" aria-labelledby="ledger-title">
-          <div class="result-section-heading compact"><div><span class="overline">Evidence ledger</span><h2 id="ledger-title">Priority requirement evidence</h2><p>Meaningful skills and responsibilities detected in the job post.</p></div><span>{{ assessment.requirements | length }} reviewed</span></div>
+          <div class="result-section-heading compact"><div><span class="overline">Evidence ledger</span><h2 id="ledger-title">Priority requirement evidence</h2><p>{% if use_ai_ledger %}The job's key requirements, checked against exact quotes from your CV.{% else %}Skills and tools detected in the job post.{% endif %}</p></div><span>{{ total_requirements }} reviewed</span></div>
           <div class="evidence-list">
+            {% if use_ai_ledger %}
+            {% for requirement in ledger %}
+            <article class="evidence-row {% if requirement.supported %}is-supported{% else %}is-missing{% endif %}">
+              <div class="evidence-status" aria-label="{% if requirement.supported %}Supported{% else %}Missing evidence{% endif %}"><span aria-hidden="true">{% if requirement.supported %}&check;{% else %}&minus;{% endif %}</span></div>
+              <div><div class="requirement-heading"><h3 class="requirement-name">{{ requirement.requirement }}</h3><span>{% if requirement.supported %}Supported{% else %}Missing evidence{% endif %}</span></div>
+              {% if requirement.supported %}<p>&ldquo;{{ requirement.evidence }}&rdquo;</p>{% else %}<p>No direct CV line was found for this requirement.</p>{% endif %}</div>
+            </article>
+            {% endfor %}
+            {% else %}
             {% for requirement in assessment.requirements %}
             <article class="evidence-row {% if requirement.matched %}is-supported{% else %}is-missing{% endif %}">
               <div class="evidence-status" aria-label="{% if requirement.matched %}Supported{% else %}Missing evidence{% endif %}"><span aria-hidden="true">{% if requirement.matched %}&check;{% else %}&minus;{% endif %}</span></div>
@@ -315,6 +327,7 @@
               {% if requirement.matched %}<p>&ldquo;{{ requirement.evidence[0] }}&rdquo;</p>{% else %}<p>No direct CV line was found for this priority requirement.</p>{% endif %}</div>
             </article>
             {% endfor %}
+            {% endif %}
           </div>
         </section>
 

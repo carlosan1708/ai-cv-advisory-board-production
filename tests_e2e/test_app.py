@@ -37,7 +37,7 @@ def test_home_presents_free_and_private_modes(page: Page) -> None:
     expect(page.get_by_text("Shared $5 monthly AI pool", exact=False)).to_be_visible()
     allowance_copy = page.get_by_text("Each approved member has a $10 monthly AI allowance", exact=False)
     expect(allowance_copy).to_have_count(0)
-    assert page.locator('link[rel="stylesheet"]').get_attribute("href") == "/static/app.css?v=12"
+    assert page.locator('link[rel="stylesheet"]').get_attribute("href") == "/static/app.css?v=13"
     assert page.evaluate("getComputedStyle(document.body).backgroundColor") == "rgb(244, 243, 239)"
     page.get_by_test_id("member-mode-button").click()
     expect(page).to_have_url(f"{BASE_URL}/dashboard")

@@ -645,3 +645,5 @@ a { color: inherit; }
 
 .result-score .secondary-score { margin-top: 10px; color: var(--muted); font-size: 0.75rem; line-height: 1.35; }
 .verdict-evidence p { margin: 4px 0 0; color: var(--muted); font-size: 0.85rem; }
+
+.requirement-heading h3.requirement-name { text-transform: none; }

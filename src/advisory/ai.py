@@ -67,6 +67,22 @@ class TailoringMove(BaseModel):
         return str(value)[:220]
 
 
+class RequirementCheck(BaseModel):
+    requirement: str = Field(max_length=120)
+    supported: bool = False
+    evidence: str = Field(default="", max_length=240)
+
+    @field_validator("requirement", mode="before")
+    @classmethod
+    def bound_requirement(cls, value: object) -> str:
+        return str(value)[:120]
+
+    @field_validator("evidence", mode="before")
+    @classmethod
+    def bound_requirement_evidence(cls, value: object) -> str:
+        return str(value or "")[:240]
+
+
 class EvidenceReview(BaseModel):
     fit_score: int = Field(ge=0, le=100)
     summary: str = Field(max_length=700)
@@ -76,6 +92,7 @@ class EvidenceReview(BaseModel):
     advisor_findings: list[AdvisorFinding] = Field(default_factory=list, max_length=3)
     tailoring_moves: list[TailoringMove] = Field(default_factory=list, max_length=4)
     interview_questions: list[str] = Field(default_factory=list, max_length=4)
+    requirements: list[RequirementCheck] = Field(default_factory=list, max_length=12)
 
     @field_validator("fit_score", mode="before")
     @classmethod
@@ -111,6 +128,11 @@ class EvidenceReview(BaseModel):
     @classmethod
     def bound_tailoring_moves(cls, value: object) -> list[object]:
         return value[:4] if isinstance(value, list) else []
+
+    @field_validator("requirements", mode="before")
+    @classmethod
+    def bound_requirements(cls, value: object) -> list[object]:
+        return value[:12] if isinstance(value, list) else []
 
 
 class CvReview(BaseModel):
@@ -188,7 +210,7 @@ OWNERSHIP_RE = re.compile(
 
 
 def _cv_lines(cv_text: str) -> list[str]:
-    return [line.strip(" -•*\t") for line in cv_text.splitlines() if len(line.strip()) >= 12]
+    return [unit for unit in MatchPolicy.evidence_units(cv_text) if len(unit) >= 12]
 
 
 def _matching_lines(lines: list[str], pattern: re.Pattern[str], limit: int = 2) -> list[str]:
@@ -363,6 +385,14 @@ class DeterministicAiReviewer:
             advisor_findings=[finding(advisor["id"]) for advisor in selected_advisors],
             tailoring_moves=tailoring_moves[:4],
             interview_questions=questions[:4],
+            requirements=[
+                RequirementCheck(
+                    requirement=item.term,
+                    supported=item.matched,
+                    evidence=item.evidence[0] if item.evidence else "",
+                )
+                for item in assessment.requirements
+            ],
         )
         return review, 0, 0
 
@@ -387,7 +417,14 @@ def verified_evidence(review: EvidenceReview, cv_text: str) -> EvidenceReview:
         )
         for finding in review.advisor_findings
     ]
-    return review.model_copy(update={"advisor_findings": findings})
+    requirements = []
+    for item in review.requirements:
+        quote = _normalize_quote(item.evidence.rstrip("…").rstrip("."))
+        verified = bool(item.supported and quote and quote in normalized_cv)
+        requirements.append(
+            item.model_copy(update={"supported": verified, "evidence": item.evidence if verified else ""})
+        )
+    return review.model_copy(update={"advisor_findings": findings, "requirements": requirements})
 
 
 def _strict_object(properties: dict[str, object]) -> dict[str, object]:
@@ -425,6 +462,12 @@ EVIDENCE_REVIEW_SCHEMA = _strict_object(
             "items": _strict_object({"section": _STRING, "change": _STRING, "reason": _STRING}),
         },
         "interview_questions": _STRING_LIST,
+        "requirements": {
+            "type": "array",
+            "items": _strict_object(
+                {"requirement": _STRING, "supported": {"type": "boolean"}, "evidence": _STRING}
+            ),
+        },
     }
 )
 CV_REVIEW_SCHEMA = _strict_object(
@@ -529,6 +572,10 @@ Make the report practical and specific:
 - advisor findings: distinct perspective, up to two exact CV quotes, and one concrete recommendation each.
 - tailoring moves: safe edits to emphasis, ordering, clarity, or wording; never add new experience.
 - interview questions: questions the candidate should prepare from gaps or important evidence.
+- requirements: the job's 8-12 most important real requirements (skills, tools, experience, scope,
+  responsibilities), named in a few words each. Never list generic words or company boilerplate.
+  supported=true only when the CV directly shows it; then evidence is one short quote copied exactly from
+  the CV. Otherwise supported=false and evidence is "".
 - use at most five strengths, five gaps, four next actions, four tailoring moves, and four questions.
 - keep every list item under 35 words. Write in the language of the CV."""
         documents = f"<cv>\n{cv_text}\n</cv>\n\n<job_description>\n{job_text}\n</job_description>"

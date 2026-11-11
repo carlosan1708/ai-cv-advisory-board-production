@@ -23,7 +23,7 @@ def test_home_explains_product_and_board() -> None:
     assert "Choose your own 1–3 specialist advisory panel" in response.text
     assert "Shared $5 monthly AI pool" in response.text
     assert "Each approved member has a $10 monthly AI allowance" not in response.text
-    assert 'href="/static/app.css?v=12"' in response.text
+    assert 'href="/static/app.css?v=13"' in response.text
 
 
 def test_tracker_page_has_board_funnel_and_fast_add() -> None:

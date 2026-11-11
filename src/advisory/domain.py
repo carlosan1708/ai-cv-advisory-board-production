@@ -22,17 +22,42 @@ BOILERPLATE_TERMS = frozenset(
     "sign similar site support terms today view what where who why".split()
 )
 KNOWN_REQUIREMENT_TERMS = frozenset(
-    "accessibility agile ai analytics architecture ats aws azure coaching communication compliance css "
-    "cybersecurity django docker fastapi figma finops flask gcp git github golang graphql hadoop "
-    "infrastructure java "
-    "javascript kafka kubernetes langchain leadership llm mentoring microservices ml mongodb mysql node "
-    "observability ownership postgresql product prototyping python pytorch react redis reliability "
-    "research rust scalability scrum security spark sql stakeholder strategy tensorflow terraform "
-    "testing typography typescript ux vue".split()
+    "accessibility agile agents agentic ai airflow analytics android angular ansible api apis architecture "
+    "ats aws azure bash bigquery budgeting c# c++ cassandra ci/cd cloudformation coaching communication "
+    "compliance css cybersecurity dashboards databricks datadog dbt devops django docker dynamodb "
+    "elasticsearch embeddings etl excel experimentation fastapi figma finops flask flutter forecasting "
+    "gcp git github gitlab golang grafana graphql grpc hadoop helm hiring html hubspot ios java javascript "
+    "jenkins jira kafka keras kotlin kubernetes lambda langchain langgraph leadership linux llm llmops "
+    "llms looker marketing mentoring microservices ml mlops mongodb mysql negotiation next.js nlp node "
+    "node.js numpy observability onboarding openai oracle ownership pandas php postgres postgresql "
+    "powerbi prometheus prototyping pulumi python pytorch rabbitmq rag react redis redshift reliability "
+    "research roadmap ruby rust salesforce sap scala scalability scikit-learn scrum security seo snowflake "
+    "spark splunk spring sql stakeholder stakeholders statistics strategy swift tableau tensorflow "
+    "terraform testing typescript typography ux vue".split()
+)
+ACRONYM_STOPLIST = frozenset(
+    "ceo cto cfo coo eeo eoe hr pto usa us uk eu emea apac latam faq ok id inc llc ltd co etc "
+    "am pm est pst cet utc ny sf la".split()
 )
 CURATED_PHRASES = (
+    "a/b testing",
+    "agent orchestration",
     "artificial intelligence",
     "automated testing",
+    "cloud infrastructure",
+    "code review",
+    "data pipelines",
+    "data visualization",
+    "deep learning",
+    "event-driven architecture",
+    "fine-tuning",
+    "infrastructure as code",
+    "large language models",
+    "prompt engineering",
+    "react native",
+    "system design",
+    "tool calling",
+    "vector databases",
     "computer vision",
     "continuous delivery",
     "continuous integration",
@@ -87,6 +112,7 @@ TERM_ALIASES: dict[str, tuple[str, ...]] = {
     "user research": ("user research", "usability testing", "user interviews"),
 }
 BULLET_CHARS = " -\u2022*\t"
+HEADING_PREFIX_RE = re.compile(r"^(?:[A-Z][A-Z&/]{3,}\s+)+(?=[A-Z][a-z])")
 SECTIONS = {
     "experience": ("experience", "employment", "work history"),
     "skills": ("skills", "technologies", "technical skills"),
@@ -108,7 +134,7 @@ class ScoreComponents(BaseModel):
 
 class Assessment(BaseModel):
     schema_version: str = "1.0"
-    scoring_version: str = "baseline-2"
+    scoring_version: str = "baseline-3"
     score: int = Field(ge=0, le=100)
     band: str
     components: ScoreComponents
@@ -121,7 +147,7 @@ class Assessment(BaseModel):
 @dataclass(frozen=True)
 class MatchPolicy:
     max_requirements: int = 12
-    scoring_version: ClassVar[str] = "baseline-2"
+    scoring_version: ClassVar[str] = "baseline-3"
 
     @staticmethod
     def tokens(text: str) -> list[str]:
@@ -152,16 +178,21 @@ class MatchPolicy:
                 or token in phrase_tokens
             ):
                 continue
-            is_acronym = raw_token.isupper() and raw_token.isalpha() and 2 <= len(raw_token) <= 8
-            is_technical_shape = any(character in raw_token for character in "+#./-") or any(
-                character.isdigit() for character in raw_token
+            is_acronym = (
+                raw_token.isupper()
+                and raw_token.isalpha()
+                and 2 <= len(raw_token) <= 6
+                and token not in ACRONYM_STOPLIST
             )
-            is_meaningful = (
-                token in KNOWN_REQUIREMENT_TERMS
-                or is_acronym
-                or is_technical_shape
-                or (token_counts[token] >= 2 and len(token) >= 4)
+            is_technical_shape = (
+                any(character in raw_token for character in "+#")
+                or bool(re.fullmatch(r"[a-z]+\.(js|ts|net|io)", token))
+                or (
+                    any(character.isdigit() for character in raw_token)
+                    and any(character.isalpha() for character in raw_token)
+                )
             )
+            is_meaningful = token in KNOWN_REQUIREMENT_TERMS or is_acronym or is_technical_shape
             if not is_meaningful:
                 continue
             counts[token] = counts.get(token, 0) + 1
@@ -179,11 +210,31 @@ class MatchPolicy:
         body = "|".join(sorted(alternatives, key=len, reverse=True))
         return re.compile(rf"(?<![a-z0-9])(?:{body})(?:s|es)?(?![a-z0-9])", re.IGNORECASE)
 
+    @staticmethod
+    def evidence_units(cv_text: str) -> list[str]:
+        """Readable CV statements: real lines, or sentences rebuilt when a PDF split text into fragments."""
+        lines = [line.strip(BULLET_CHARS) for line in cv_text.splitlines() if line.strip(BULLET_CHARS)]
+        if not lines:
+            return []
+        short = sum(len(line.split()) <= 2 for line in lines)
+        if len(lines) < 15 or short / len(lines) <= 0.6:
+            return lines
+        flowing = " ".join(" ".join(lines).split())
+        parts = re.split(r"(?<=[.;!?])\s+|\s+[\u2022\u25aa\u25cf\u25e6\u2013|]\s+", flowing)
+        units: list[str] = []
+        for part in parts:
+            words = part.split()
+            for start in range(0, len(words), 30):
+                chunk = " ".join(words[start : start + 30]).strip(BULLET_CHARS)
+                chunk = HEADING_PREFIX_RE.sub("", chunk)
+                if chunk:
+                    units.append(chunk)
+        return units
+
     @classmethod
     def _evidence(cls, term: str, cv_text: str) -> list[str]:
         pattern = cls.term_pattern(term)
-        lines = [line.strip(BULLET_CHARS) for line in cv_text.splitlines() if line.strip(BULLET_CHARS)]
-        return [line[:240] for line in lines if pattern.search(line)][:3]
+        return [unit[:240] for unit in cls.evidence_units(cv_text) if pattern.search(unit)][:3]
 
     def assess(self, cv_text: str, job_text: str) -> Assessment:
         terms = self.extract_requirements(job_text)

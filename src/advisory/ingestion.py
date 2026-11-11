@@ -82,13 +82,31 @@ class CvDocumentParser:
                     f"The PDF has more than {self.max_pdf_pages} pages. "
                     f"Upload a shorter {self.document_name}."
                 )
-            return "\n".join(page.extract_text() or "" for page in reader.pages)
+            plain = "\n".join(page.extract_text() or "" for page in reader.pages)
+            if _fragmented(plain):
+                try:
+                    layout = "\n".join(
+                        page.extract_text(extraction_mode="layout") or "" for page in reader.pages
+                    )
+                except Exception:  # noqa: BLE001 - layout mode is a best-effort improvement
+                    layout = ""
+                layout = "\n".join(" ".join(line.split()) for line in layout.splitlines())
+                if layout.strip() and not _fragmented(layout):
+                    return layout
+            return plain
         except CvDocumentError:
             raise
         except Exception as exc:
             raise CvDocumentError(
                 f"The PDF could not be read. Upload a valid PDF or paste the {self.document_name} text."
             ) from exc
+
+
+def _fragmented(text: str) -> bool:
+    lines = [line for line in text.splitlines() if line.strip()]
+    if len(lines) < 15:
+        return False
+    return sum(len(line.split()) <= 2 for line in lines) / len(lines) > 0.6
 
 
 Resolver = Callable[[str], Sequence[str]]

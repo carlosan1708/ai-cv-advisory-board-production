@@ -266,3 +266,39 @@ def test_standalone_cv_reviewer_scores_structure() -> None:
     assert review.quality_score >= 80
     assert "Includes quantified evidence" in review.strengths
     assert input_tokens == output_tokens == 0
+
+
+def test_requirement_ledger_keeps_only_verified_quotes() -> None:
+    review = EvidenceReview.model_validate(
+        {
+            "fit_score": 70,
+            "summary": "s",
+            "supported_strengths": [],
+            "evidence_gaps": [],
+            "next_actions": [],
+            "requirements": [
+                {
+                    "requirement": "LangGraph agents",
+                    "supported": True,
+                    "evidence": "Built agents with LangGraph.",
+                },
+                {"requirement": "Kubernetes", "supported": True, "evidence": "Ran Kubernetes at scale."},
+                {"requirement": "Terraform", "supported": False, "evidence": "anything"},
+            ],
+        }
+    )
+    cv = "EXPERIENCE\n- Built agents\nwith LangGraph.\nSKILLS\nPython"
+    checked = verified_evidence(review, cv).requirements
+    assert [(item.requirement, item.supported, item.evidence) for item in checked] == [
+        ("LangGraph agents", True, "Built agents with LangGraph."),
+        ("Kubernetes", False, ""),
+        ("Terraform", False, ""),
+    ]
+
+
+def test_deterministic_reviewer_fills_the_requirement_ledger() -> None:
+    review, _, _ = DeterministicAiReviewer().review("EXPERIENCE\nBuilt Python services", "Python Kubernetes")
+    assert [(item.requirement, item.supported) for item in review.requirements] == [
+        ("python", True),
+        ("kubernetes", False),
+    ]

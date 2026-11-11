@@ -207,7 +207,11 @@
       notice.append(el("span", "", "i"), copy); body.append(notice);
     }
 
-    const matched = assessment.requirements.filter((item) => item.matched);
+    const useAiLedger = !saved.degraded && Array.isArray(review.requirements) && review.requirements.length > 0;
+    const ledgerItems = useAiLedger
+      ? review.requirements.map((item) => ({ term: item.requirement, matched: item.supported, evidence: item.evidence ? [item.evidence] : [] }))
+      : assessment.requirements;
+    const matched = ledgerItems.filter((item) => item.matched);
     const decision = el("section", "decision-card primary-decision");
     const score = el("div", "result-score");
     const scoreValue = el("div"); scoreValue.append(el("strong", "", String(review.fit_score)), el("small", "", "/100"));
@@ -216,7 +220,7 @@
     const copy = el("div", "decision-copy");
     copy.append(el("span", "overline", "Board consensus"), el("p", "", review.summary));
     const facts = el("div", "decision-facts");
-    [[matched.length, "Requirements supported"], [assessment.requirements.length - matched.length, "Evidence gaps"]].forEach(([value, label]) => { const fact = el("div"); fact.append(el("strong", "", String(value)), el("span", "", label)); facts.append(fact); });
+    [[matched.length, "Requirements supported"], [ledgerItems.length - matched.length, "Evidence gaps"]].forEach(([value, label]) => { const fact = el("div"); fact.append(el("strong", "", String(value)), el("span", "", label)); facts.append(fact); });
     decision.append(score, copy, facts); body.append(decision);
 
     const board = el("section", "board-report");
@@ -250,13 +254,13 @@
 
     const ledger = el("section", "evidence-ledger");
     const ledgerHead = el("div", "result-section-heading compact"); const ledgerTitle = el("div");
-    ledgerTitle.append(el("span", "overline", "Evidence ledger"), el("h2", "", "Priority requirement evidence")); ledgerHead.append(ledgerTitle, el("span", "", `${assessment.requirements.length} reviewed`));
+    ledgerTitle.append(el("span", "overline", "Evidence ledger"), el("h2", "", "Priority requirement evidence")); ledgerHead.append(ledgerTitle, el("span", "", `${ledgerItems.length} reviewed`));
     const rows = el("div", "evidence-list");
-    assessment.requirements.forEach((requirement) => {
+    ledgerItems.forEach((requirement) => {
       const row = el("article", `evidence-row ${requirement.matched ? "is-supported" : "is-missing"}`);
       const status = el("div", "evidence-status"); status.append(el("span", "", requirement.matched ? "✓" : "−"));
       const detail = el("div"); const head = el("div", "requirement-heading");
-      head.append(el("h3", "", requirement.term), el("span", "", requirement.matched ? "Supported" : "Missing evidence"));
+      head.append(el("h3", "requirement-name", requirement.term), el("span", "", requirement.matched ? "Supported" : "Missing evidence"));
       detail.append(head, el("p", "", requirement.matched ? `“${requirement.evidence[0]}”` : "No direct CV line was found for this requirement."));
       row.append(status, detail); rows.append(row);
     });
