@@ -64,3 +64,18 @@
 }
 
 .requirement-name { text-transform: none; }
+
+.stacked-label { display: grid; gap: 6px; font-size: .78rem; font-weight: 700; }
+.stacked-label input, .stacked-label select, .stacked-label textarea { font-weight: 400; }
+.job-source-card { margin: 4px 0 16px; padding: 16px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); display: grid; gap: 12px; }
+.job-source-heading { display: flex; justify-content: space-between; align-items: baseline; }
+.job-source-heading strong { font-size: .9rem; }
+.job-source-heading span { color: var(--muted); font-size: .72rem; }
+.source-tabs { display: flex; flex-wrap: wrap; gap: 6px; }
+.source-tabs button { padding: 7px 12px; border: 1px solid var(--line-strong); border-radius: 99px; background: var(--surface); color: var(--ink-soft); font: inherit; font-size: .75rem; font-weight: 700; cursor: pointer; }
+.source-tabs button.active { border-color: var(--brand); background: var(--brand); color: #fff; }
+.source-panel small { color: var(--muted); font-size: .7rem; }
+.source-panel textarea, .source-panel input[type=url] { width: 100%; }
+.preview-status { margin: 0; min-height: 1em; color: var(--muted); font-size: .74rem; }
+.preview-status[data-tone="ok"] { color: var(--brand-dark); font-weight: 700; }
+.preview-status[data-tone="error"] { color: #b42318; }

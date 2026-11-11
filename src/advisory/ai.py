@@ -408,7 +408,7 @@ def verified_evidence(review: EvidenceReview, cv_text: str) -> EvidenceReview:
         finding.model_copy(
             update={
                 "evidence": [
-                    quote
+                    " ".join(quote.split())
                     for quote in finding.evidence
                     if (normalized := _normalize_quote(quote.rstrip("…").rstrip(".")))
                     and normalized in normalized_cv
@@ -421,9 +421,8 @@ def verified_evidence(review: EvidenceReview, cv_text: str) -> EvidenceReview:
     for item in review.requirements:
         quote = _normalize_quote(item.evidence.rstrip("…").rstrip("."))
         verified = bool(item.supported and quote and quote in normalized_cv)
-        requirements.append(
-            item.model_copy(update={"supported": verified, "evidence": item.evidence if verified else ""})
-        )
+        evidence = " ".join(item.evidence.split()) if verified else ""
+        requirements.append(item.model_copy(update={"supported": verified, "evidence": evidence}))
     return review.model_copy(update={"advisor_findings": findings, "requirements": requirements})
 
 

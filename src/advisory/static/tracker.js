@@ -59,6 +59,10 @@
     answersButton.textContent = application.answer_count ? `Answers · ${application.answer_count}` : "Answers";
     answersButton.setAttribute("aria-label", `Answers for ${application.role} at ${application.company}`);
     answersButton.addEventListener("click", () => openAnswers(application).catch((error) => window.alert(error.message)));
+    const practiceLink = card.querySelector(".card-practice-link");
+    practiceLink.href = `/practice?application=${encodeURIComponent(application.id)}`;
+    practiceLink.textContent = application.practice_count ? `Practice · ${application.practice_count}` : "Practice";
+    practiceLink.setAttribute("aria-label", `Practise interview questions for ${application.role} at ${application.company}`);
     const removeButton = card.querySelector(".card-remove-button");
     removeButton.setAttribute("aria-label", `Remove ${application.role} at ${application.company}`);
     removeButton.addEventListener("click", () => removeApplication(application).catch((error) => window.alert(error.message)));

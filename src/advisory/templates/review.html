@@ -4,7 +4,7 @@
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Guided review | AI CV Advisory Board</title>
   <meta name="description" content="Review a saved CV against an application with your advisory board, then improve it with a short interview.">
-  <link rel="stylesheet" href="/static/app.css?v=13"><link rel="stylesheet" href="/static/tracker.css?v=10"><link rel="stylesheet" href="/static/review.css?v=2">
+  <link rel="stylesheet" href="/static/app.css?v=13"><link rel="stylesheet" href="/static/tracker.css?v=13"><link rel="stylesheet" href="/static/review.css?v=3">
   {% if auth_mode == "google" %}<script src="https://accounts.google.com/gsi/client" async defer></script>{% endif %}
 </head>
 <body class="tracker-page guided-review-page">
@@ -13,7 +13,7 @@
   {% endif %}
   <header class="tracker-header workspace-header-nav">
     <a class="brand" href="/dashboard"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span><span class="brand-copy"><strong>AI CV</strong><small>Career workspace</small></span></a>
-    <nav aria-label="Workspace navigation"><a href="/dashboard">Dashboard</a><a class="active" href="/review">Guided review</a><a href="/cvs">CV Library</a><a href="/dashboard#history">History</a><a href="/admin" data-admin-link hidden>Access</a></nav>
+    <nav aria-label="Workspace navigation"><a href="/dashboard">Dashboard</a><a class="active" href="/review">Guided review</a><a href="/practice">Practice</a><a href="/cvs">CV Library</a><a href="/dashboard#history">History</a><a href="/admin" data-admin-link hidden>Access</a></nav>
     <a class="button button-secondary button-small" href="/dashboard">Back to dashboard</a>
   </header>
 
@@ -48,21 +48,32 @@
     </section>
 
     <section class="review-panel" data-step="2" aria-labelledby="step-job-title">
-      <div class="panel-heading"><span class="stage-label">Step 2 of 3</span><h2 id="step-job-title" tabindex="-1">Which job is this for?</h2><p>The report is saved on the application so you can reopen it from your dashboard.</p></div>
+      <div class="panel-heading"><span class="stage-label">Step 2 of 3</span><h2 id="step-job-title" tabindex="-1">Which job is this for?</h2><p>Add the posting once &mdash; a link, a PDF, or the text. We fill in the company and role for you, and save the report on the application.</p></div>
       <fieldset class="review-scope job-mode">
         <legend>Application</legend>
         <label><input type="radio" name="job_mode" value="existing" checked data-job-mode><span><strong>An application I'm tracking</strong><small>Pick it from your pipeline</small></span></label>
         <label><input type="radio" name="job_mode" value="new" data-job-mode><span><strong>A new application</strong><small>Adds it to your pipeline</small></span></label>
       </fieldset>
-      <div data-existing-fields><label>Application <select data-application-select><option value="">Choose an application</option></select></label><p class="job-saved" data-job-saved></p></div>
-      <div class="field-grid two-columns" data-new-fields hidden>
-        <label>Company <input maxlength="120" placeholder="e.g. Lumenalta" data-new-company autocomplete="organization"></label>
-        <label>Role <input maxlength="160" placeholder="e.g. Senior AI Engineer" data-new-role></label>
+      <div data-existing-fields><label class="stacked-label">Application <select data-application-select><option value="">Choose an application</option></select></label></div>
+
+      <div class="job-source-card">
+        <div class="job-source-heading"><strong>Job posting</strong><span>One is enough</span></div>
+        <div class="source-tabs" role="tablist" aria-label="Job posting source">
+          <button type="button" role="tab" data-source-tab="saved" hidden>Use saved</button>
+          <button type="button" role="tab" data-source-tab="link">Link</button>
+          <button type="button" role="tab" data-source-tab="file">PDF or TXT</button>
+          <button type="button" role="tab" data-source-tab="text">Paste text</button>
+        </div>
+        <div class="source-panel" data-source-panel="saved" hidden><p class="job-saved" data-job-saved></p></div>
+        <div class="source-panel" data-source-panel="link"><label class="stacked-label">Public job link <input type="url" placeholder="https://company.com/jobs/role" data-job-url data-testid="guided-job-url"></label><small>We read the posting. If the site blocks us, upload it as a PDF instead.</small></div>
+        <div class="source-panel" data-source-panel="file" hidden><label class="stacked-label">Posting file <input type="file" accept=".pdf,.txt,application/pdf,text/plain" data-job-file data-testid="guided-job-file"></label><small>Save the job page as PDF from your browser (Print &rarr; Save as PDF) if the link doesn't work.</small></div>
+        <div class="source-panel" data-source-panel="text" hidden><label class="stacked-label">Job description <textarea rows="7" maxlength="30000" placeholder="Paste responsibilities and requirements…" data-job-text></textarea></label></div>
+        <p class="preview-status" data-preview-status aria-live="polite"></p>
       </div>
-      <div class="job-sources">
-        <label>Public job link <input type="url" placeholder="https://company.com/jobs/role" data-job-url></label>
-        <label>Or upload the posting <span class="optional-label">PDF or TXT, best when the link can't be read</span><input type="file" accept=".pdf,.txt,application/pdf,text/plain" data-job-file data-testid="guided-job-file"></label>
-        <details class="fallback-disclosure"><summary>Or paste the job description <span aria-hidden="true">+</span></summary><div class="fallback-content"><textarea rows="7" maxlength="30000" placeholder="Paste responsibilities and requirements…" data-job-text></textarea></div></details>
+
+      <div class="field-grid two-columns" data-new-fields hidden>
+        <label class="stacked-label">Company <input maxlength="120" placeholder="Filled from the posting" data-new-company autocomplete="organization"></label>
+        <label class="stacked-label">Role <input maxlength="160" placeholder="Filled from the posting" data-new-role></label>
       </div>
       <p class="form-error" data-step-error="2" role="alert"></p>
       <div class="panel-actions"><button class="text-action as-button" type="button" data-back="1">&larr; Back to CV</button><button class="button button-primary" type="button" data-next="2">Choose your board <span aria-hidden="true">&rarr;</span></button></div>
@@ -101,7 +112,7 @@
     </section>
 
     <section class="guided-report" data-step="4" hidden aria-labelledby="report-title">
-      <div class="report-toolbar"><div><span class="overline">Saved report</span><h2 id="report-title" tabindex="-1" data-report-title>Board report</h2><small data-report-meta></small></div><div class="report-toolbar-actions"><button class="button button-secondary button-small" type="button" data-new-review>Review again</button><a class="button button-secondary button-small" href="/dashboard">Dashboard</a></div></div>
+      <div class="report-toolbar"><div><span class="overline">Saved report</span><h2 id="report-title" tabindex="-1" data-report-title>Board report</h2><small data-report-meta></small></div><div class="report-toolbar-actions"><a class="button button-primary button-small" data-practice-link href="/practice">Practise for this interview</a><button class="button button-secondary button-small" type="button" data-new-review>Review again</button><a class="button button-secondary button-small" href="/dashboard">Dashboard</a></div></div>
       <div data-report-body></div>
 
       <section class="interview-panel" aria-labelledby="interview-title" data-interview>
@@ -133,6 +144,6 @@
   </main>
   <nav class="mobile-workspace-nav" aria-label="Mobile workspace navigation"><a href="/dashboard">Dashboard</a><a class="active" href="/review">Review</a><a href="/cvs">CVs</a></nav>
   <script type="application/json" id="advisors-data">{{ advisors_data | tojson }}</script>
-  <script src="/static/review.js?v=2" defer></script>
+  <script src="/static/review.js?v=4" defer></script>
 </body>
 </html>

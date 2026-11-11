@@ -94,3 +94,6 @@
 .answer-editor label { display: grid; gap: 6px; font-size: .78rem; font-weight: 700; }
 .answer-editor textarea { width: 100%; padding: 10px 12px; border: 1px solid var(--line-strong); border-radius: 10px; font: inherit; font-size: .82rem; resize: vertical; }
 .card-answers-button { padding: 6px 2px; font-size: .8rem; }
+
+.card-practice-link { padding: 6px 2px; font-size: .8rem; }
+.card-actions { flex-wrap: wrap; }

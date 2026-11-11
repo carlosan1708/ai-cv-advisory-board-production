@@ -412,7 +412,7 @@ def test_guided_review_saves_report_and_interview_creates_new_version(page: Page
     page.get_by_text("A new application").click()
     page.locator("[data-new-company]").fill(f"Globex {suffix}")
     page.locator("[data-new-role]").fill("Platform Engineer")
-    page.get_by_text("Or paste the job description").click()
+    page.get_by_role("tab", name="Paste text").click()
     page.locator("[data-job-text]").fill("Platform Engineer: Python, Kubernetes, Terraform.")
     page.get_by_role("button", name="Choose your board").click()
     page.get_by_test_id("guided-run-review").click()
@@ -461,3 +461,60 @@ def test_answers_dialog_records_edits_and_searches_answers(page: Page) -> None:
     dialog.locator(".icon-button").click()
     answers_button = card.get_by_role("button", name=f"Answers for Data Engineer at {company}")
     expect(answers_button).to_have_text("Answers · 2")
+
+
+def test_guided_review_reads_company_and_role_from_an_uploaded_posting(page: Page) -> None:
+    company = f"Hooli {uuid4().hex[:6]}"
+    page.goto(f"{BASE_URL}/review")
+    expect(page.locator("[data-loading-workspace]")).to_be_hidden()
+    page.locator("[data-cv-upload-panel]").evaluate("panel => { panel.open = true; }")
+    page.get_by_test_id("guided-cv-file").set_input_files(
+        files=[{"name": "cv.txt", "mimeType": "text/plain", "buffer": b"EXPERIENCE\n- Built data pipelines."}]
+    )
+    page.get_by_role("button", name="Continue to job").click()
+    page.get_by_text("A new application").click()
+    page.get_by_role("tab", name="PDF or TXT").click()
+    posting = f"Senior Data Engineer at {company}\nRequirements: Python, Spark, Airflow.".encode()
+    page.get_by_test_id("guided-job-file").set_input_files(
+        files=[{"name": "posting.txt", "mimeType": "text/plain", "buffer": posting}]
+    )
+    expect(page.locator("[data-preview-status]")).to_contain_text("Posting read")
+    expect(page.locator("[data-new-role]")).to_have_value("Senior Data Engineer")
+    expect(page.locator("[data-new-company]")).to_have_value(company)
+    page.get_by_role("button", name="Choose your board").click()
+    page.get_by_test_id("guided-run-review").click()
+    expect(page.get_by_role("heading", name=f"Senior Data Engineer at {company}")).to_be_visible()
+
+
+def test_practice_cards_flip_rate_and_level_up_controls(page: Page) -> None:
+    company = f"Pied Piper {uuid4().hex[:6]}"
+    cv = page.request.post(
+        f"{BASE_URL}/api/cv-versions",
+        multipart={
+            "label": "Practice CV",
+            "cv_file": {
+                "name": "cv.txt",
+                "mimeType": "text/plain",
+                "buffer": b"EXPERIENCE\n- Built compression services in Python.\nSKILLS\nPython",
+            },
+        },
+    ).json()
+    application = page.request.post(
+        f"{BASE_URL}/api/applications",
+        data={"company": company, "role": "Backend Engineer", "cv_version_id": cv["id"]},
+    ).json()
+    page.goto(f"{BASE_URL}/practice?application={application['id']}")
+    expect(page.get_by_text("No cards yet.")).to_be_visible()
+    expect(page.get_by_test_id("generate-level")).to_have_value("1")
+    page.get_by_test_id("generate-cards").click()
+    expect(page.locator("[data-practice-notice]")).to_contain_text("Added")
+    first_question = page.get_by_test_id("card-question").inner_text()
+    page.keyboard.press("Space")
+    expect(page.locator("[data-card-points] li").first).to_be_visible()
+    page.get_by_test_id("rate-good").click()
+    expect(page.get_by_test_id("card-question")).not_to_have_text(first_question)
+    expect(page.locator("[data-deck-summary]")).to_contain_text("due now")
+    page.get_by_test_id("generate-level").select_option("3")
+    page.get_by_test_id("generate-cards").click()
+    page.get_by_role("button", name="Level 3", exact=True).click()
+    expect(page.locator("[data-card-level]")).to_have_text("Level 3 · Tough")

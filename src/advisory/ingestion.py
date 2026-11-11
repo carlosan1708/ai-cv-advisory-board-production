@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import html
 import io
 import ipaddress
 import json
+import re
 import socket
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
@@ -299,6 +301,80 @@ def extract_job_description(document: str) -> str:
 
 
 @dataclass(frozen=True)
+class JobPage:
+    text: str
+    role: str = ""
+    company: str = ""
+
+
+_META_RE = re.compile(
+    r"<meta[^>]+(?:property|name)=[\"'](?P<key>og:title|og:site_name|twitter:title)[\"'][^>]*"
+    r"content=[\"'](?P<value>[^\"']{1,300})[\"']",
+    re.IGNORECASE,
+)
+_TITLE_RE = re.compile(r"<title[^>]*>(?P<value>[^<]{1,300})</title>", re.IGNORECASE)
+_TITLE_NOISE = re.compile(
+    r"\s*[|\-–—]\s*(linkedin|indeed|glassdoor|careers?|jobs?|job board)\b.*$", re.IGNORECASE
+)
+_COMPANY_SUFFIX = re.compile(r"\s+(careers?|jobs?|hiring)$", re.IGNORECASE)
+_GENERIC_TITLES = frozenset({"jobs", "careers", "job", "career", "home", "apply", "job details"})
+
+
+def _posting(value: Any) -> dict[str, Any] | None:
+    if isinstance(value, dict):
+        types = value.get("@type")
+        if "JobPosting" in (types if isinstance(types, list) else [types]):
+            return value
+        for nested in value.values():
+            found = _posting(nested)
+            if found:
+                return found
+    elif isinstance(value, list):
+        for nested in value:
+            found = _posting(nested)
+            if found:
+                return found
+    return None
+
+
+def _split_title(title: str) -> tuple[str, str]:
+    cleaned = _TITLE_NOISE.sub("", html.unescape(" ".join(title.split())))
+    if cleaned.casefold() in _GENERIC_TITLES:
+        return "", ""
+    for separator in (" at ", " @ ", " - ", " | ", " – ", " — "):
+        if separator in cleaned:
+            role, company = cleaned.split(separator, 1)
+            return role.strip()[:160], _COMPANY_SUFFIX.sub("", company.strip())[:120]
+    return cleaned[:160], ""
+
+
+def extract_job_metadata(document: str) -> tuple[str, str]:
+    """Best-effort (role, company) from JobPosting JSON-LD, then social/HTML titles."""
+    parser = _JobPageParser()
+    parser.feed(document)
+    for block in parser.json_ld_blocks:
+        try:
+            posting = _posting(json.loads(block))
+        except json.JSONDecodeError:
+            continue
+        if posting:
+            organization = posting.get("hiringOrganization")
+            company = (
+                organization.get("name", "") if isinstance(organization, dict) else str(organization or "")
+            )
+            role = str(posting.get("title", ""))
+            if role or company:
+                return html.unescape(role).strip()[:160], html.unescape(company).strip()[:120]
+    metas = {match["key"].lower(): match["value"] for match in _META_RE.finditer(document)}
+    title = metas.get("og:title") or metas.get("twitter:title")
+    if not title:
+        match = _TITLE_RE.search(document)
+        title = match["value"] if match else ""
+    role, company = _split_title(title) if title else ("", "")
+    return role, company or html.unescape(metas.get("og:site_name", "")).strip()[:120]
+
+
+@dataclass(frozen=True)
 class JobDescriptionFetcher:
     resolver: Resolver = resolve_hostname
     max_response_bytes: int = 1_000_000
@@ -363,6 +439,9 @@ class JobDescriptionFetcher:
             raise JobDescriptionError("The job page resolved to an unexpected network address.")
 
     def fetch(self, raw_url: str, *, client: httpx.Client | None = None) -> str:
+        return self.fetch_page(raw_url, client=client).text
+
+    def fetch_page(self, raw_url: str, *, client: httpx.Client | None = None) -> JobPage:
         current_url = raw_url
         owns_client = client is None
         active_client = client or httpx.Client(
@@ -411,7 +490,10 @@ class JobDescriptionFetcher:
                     raise JobDescriptionError(
                         "The extracted job description is too long. Paste the relevant text."
                     )
-                return extracted
+                if content_type == "text/plain":
+                    return JobPage(text=extracted)
+                role, company = extract_job_metadata(document)
+                return JobPage(text=extracted, role=role, company=company)
         except JobDescriptionError:
             raise
         except (httpx.HTTPError, UnicodeError, ValueError) as exc:

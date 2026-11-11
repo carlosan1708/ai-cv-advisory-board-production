@@ -91,7 +91,24 @@ from advisory.interview import (
     OpenAiCvInterviewer,
     run_budgeted,
 )
+from advisory.job_preview import (
+    HeuristicJobIdentifier,
+    JobIdentifier,
+    OpenAiJobIdentifier,
+)
 from advisory.observability import emit
+from advisory.practice import (
+    MAX_BATCH,
+    CardGenerator,
+    DeterministicCardGenerator,
+    Difficulty,
+    OpenAiCardGenerator,
+    PracticeCard,
+    Rating,
+    deck_stats,
+    new_cards,
+    schedule,
+)
 from advisory.rate_limit import RateLimitExceededError, SlidingWindowRateLimiter
 from advisory.service import AssessmentService, InputError
 from advisory.settings import get_settings
@@ -219,13 +236,14 @@ def job_document_parser() -> CvDocumentParser:
     )
 
 
-APPLICATION_LIST_EXCLUDE = {"job_description", "board_review", "answer_notes"}
+APPLICATION_LIST_EXCLUDE = {"job_description", "board_review", "answer_notes", "practice_cards"}
 
 
 def application_payload(item: Application) -> dict[str, object]:
     payload = item.model_dump(mode="json", exclude=APPLICATION_LIST_EXCLUDE)
     payload["has_board_review"] = item.board_review is not None
     payload["answer_count"] = len(item.answer_notes)
+    payload["practice_count"] = len(item.practice_cards)
     return payload
 
 
@@ -1111,6 +1129,15 @@ def workspace(request: Request) -> HTMLResponse:
     return render(request)
 
 
+@app.get("/practice", response_class=HTMLResponse)
+def practice_page(request: Request) -> HTMLResponse:
+    return templates.TemplateResponse(
+        request=request,
+        name="practice.html",
+        context={"auth_mode": settings.auth_mode, "google_oauth_client_id": settings.google_oauth_client_id},
+    )
+
+
 @app.get("/review", response_class=HTMLResponse)
 def guided_review_page(request: Request) -> HTMLResponse:
     return templates.TemplateResponse(
@@ -1167,6 +1194,8 @@ async def _member_ai(
     max_output_tokens: int,
     call: Callable[[], tuple[Any, int, int]],
     fallback: Callable[[], tuple[Any, int, int]],
+    *,
+    pricing: Pricing | None = None,
 ) -> tuple[Any, str]:
     """Run a budgeted member AI call; on any limit or provider failure use the rule-based fallback."""
     status: AuditStatus = "ai"
@@ -1177,7 +1206,7 @@ async def _member_ai(
             run_budgeted,
             ledger=member_budget_ledger,
             owner_id=owner,
-            pricing=ai_pricing(),
+            pricing=pricing or ai_pricing(),
             max_input_tokens=settings.ai_max_input_tokens,
             max_output_tokens=max_output_tokens,
             call=call,
@@ -1295,6 +1324,143 @@ def get_application_board_review(request: Request, application_id: str) -> dict[
         "application": application_payload(item),
         "board_review": item.board_review.model_dump(mode="json"),
     }
+
+
+def job_identifier() -> JobIdentifier:
+    if settings.environment == "production":
+        return OpenAiJobIdentifier(openai_client(settings.free_openai_model))
+    return HeuristicJobIdentifier()
+
+
+@app.post("/api/job-preview")
+async def job_preview(
+    request: Request,
+    job_url: str = Form(""),
+    job_text: str = Form(""),
+    job_file: UploadFile | None = File(None),  # noqa: B008
+) -> dict[str, object]:
+    """Read the role and company from a job link, file, or text so the form fills itself."""
+    owner = owner_id(request)
+    role = company = text = ""
+    if job_file and job_file.filename:
+        source = "file"
+        payload = await job_file.read(settings.max_upload_bytes + 1)
+        try:
+            text = job_document_parser().parse(Path(job_file.filename).name, payload)
+        except CvDocumentError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+    elif job_url.strip():
+        source = "link"
+        try:
+            page = await run_in_threadpool(job_description_fetcher().fetch_page, job_url)
+        except JobDescriptionError as exc:
+            raise HTTPException(
+                status_code=422, detail=f"{exc} Upload the posting as a PDF or paste it instead."
+            ) from exc
+        text, role, company = page.text, page.role, page.company
+    elif job_text.strip():
+        source, text = "text", job_text.strip()[: settings.max_input_chars]
+    else:
+        raise HTTPException(status_code=422, detail="Add a job link, a PDF, or the description text.")
+    if text and not (role and company):
+        identifier = job_identifier()
+        identity, _ = await _member_ai(
+            owner,
+            "job_preview",
+            1_500,
+            lambda: identifier.identify(text),
+            lambda: HeuristicJobIdentifier().identify(text),
+            pricing=ai_pricing(free_tier=True),
+        )
+        role = role or identity.role
+        company = company or identity.company
+    return {"role": role, "company": company, "source": source, "chars": len(text)}
+
+
+def card_generator() -> CardGenerator:
+    if settings.environment == "production":
+        return OpenAiCardGenerator(openai_client(settings.openai_model))
+    return DeterministicCardGenerator()
+
+
+class PracticeGenerateRequest(BaseModel):
+    difficulty: Difficulty = 1
+    count: int = Field(default=5, ge=1, le=MAX_BATCH)
+
+
+class PracticeReviewRequest(BaseModel):
+    rating: Rating
+    my_answer: str | None = Field(default=None, max_length=3_000)
+
+
+def _practice_payload(cards: list[PracticeCard]) -> dict[str, object]:
+    now = datetime.now(UTC)
+    return {
+        "cards": [card.model_dump(mode="json") for card in cards],
+        "stats": deck_stats(cards, now),
+        "now": now.isoformat(),
+    }
+
+
+@app.get("/api/applications/{application_id}/practice")
+def get_practice_deck(request: Request, application_id: str) -> dict[str, object]:
+    application = _application_or_404(owner_id(request), application_id)
+    return _practice_payload(application.practice_cards)
+
+
+@app.post("/api/applications/{application_id}/practice/generate")
+async def generate_practice_cards(
+    request: Request, application_id: str, payload: PracticeGenerateRequest
+) -> dict[str, object]:
+    owner = owner_id(request)
+    application = _application_or_404(owner, application_id)
+    if not application.cv_version_id:
+        raise HTTPException(status_code=422, detail="Attach a CV to this application first.")
+    cv_text = _cv_text(owner, application.cv_version_id)
+    job_text = _interview_context(owner, application_id)
+    avoid = [card.question for card in application.practice_cards]
+    generator = card_generator()
+    deck, notice = await _member_ai(
+        owner,
+        "practice_cards",
+        settings.ai_max_output_tokens,
+        lambda: generator.generate(cv_text, job_text, payload.difficulty, payload.count, avoid),
+        lambda: DeterministicCardGenerator().generate(
+            cv_text, job_text, payload.difficulty, payload.count, avoid
+        ),
+    )
+    added = new_cards(deck, payload.difficulty, application.practice_cards, datetime.now(UTC))
+    cards = [*application.practice_cards, *added]
+    career_repository.update_application(owner, application_id, ApplicationUpdate(practice_cards=cards))
+    return {**_practice_payload(cards), "added": len(added), "notice": notice}
+
+
+@app.post("/api/applications/{application_id}/practice/{card_id}/review")
+def review_practice_card(
+    request: Request, application_id: str, card_id: str, payload: PracticeReviewRequest
+) -> dict[str, object]:
+    owner = owner_id(request)
+    application = _application_or_404(owner, application_id)
+    current = next((card for card in application.practice_cards if card.id == card_id), None)
+    if current is None:
+        raise HTTPException(status_code=404, detail="Practice card not found")
+    updated = schedule(current, payload.rating, datetime.now(UTC))
+    if payload.my_answer is not None:
+        updated = updated.model_copy(update={"my_answer": payload.my_answer.strip()})
+    cards = [updated if card.id == card_id else card for card in application.practice_cards]
+    career_repository.update_application(owner, application_id, ApplicationUpdate(practice_cards=cards))
+    return {"card": updated.model_dump(mode="json"), **_practice_payload(cards)}
+
+
+@app.delete("/api/applications/{application_id}/practice/{card_id}")
+def delete_practice_card(request: Request, application_id: str, card_id: str) -> dict[str, object]:
+    owner = owner_id(request)
+    application = _application_or_404(owner, application_id)
+    cards = [card for card in application.practice_cards if card.id != card_id]
+    if len(cards) == len(application.practice_cards):
+        raise HTTPException(status_code=404, detail="Practice card not found")
+    career_repository.update_application(owner, application_id, ApplicationUpdate(practice_cards=cards))
+    return _practice_payload(cards)
 
 
 class InterviewDraftRequest(BaseModel):

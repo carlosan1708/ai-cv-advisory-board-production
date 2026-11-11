@@ -173,7 +173,7 @@ def test_unverifiable_quotes_are_removed_from_advisor_findings() -> None:
         }
     )
     checked = verified_evidence(review, "EXPERIENCE\n- Built Python APIs on Google Cloud.")
-    assert checked.advisor_findings[0].evidence == ['"Built   Python APIs"']
+    assert checked.advisor_findings[0].evidence == ['"Built Python APIs"']
 
 
 def test_deterministic_panel_gives_distinct_grounded_findings() -> None:

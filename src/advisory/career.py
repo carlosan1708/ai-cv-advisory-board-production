@@ -8,6 +8,8 @@ from uuid import uuid4
 
 from pydantic import BaseModel, Field, field_validator
 
+from advisory.practice import MAX_CARDS, PracticeCard
+
 
 class ApplicationStatus(StrEnum):
     INTERESTED = "interested"
@@ -119,6 +121,7 @@ class ApplicationUpdate(BaseModel):
     fit_score: int | None = Field(default=None, ge=0, le=100)
     ai_summary: str | None = Field(default=None, max_length=700)
     answer_notes: list[AnswerNote] | None = Field(default=None, max_length=MAX_ANSWER_NOTES)
+    practice_cards: list[PracticeCard] | None = Field(default=None, max_length=MAX_CARDS)
     job_description: str | None = Field(default=None, max_length=30_000)
     job_description_filename: str | None = Field(default=None, max_length=200)
     board_review: SavedBoardReview | None = None
@@ -153,6 +156,7 @@ class Application(ApplicationCreate):
     job_description_filename: str = Field(default="", max_length=200)
     board_review: SavedBoardReview | None = None
     answer_notes: list[AnswerNote] = Field(default_factory=list, max_length=MAX_ANSWER_NOTES)
+    practice_cards: list[PracticeCard] = Field(default_factory=list, max_length=MAX_CARDS)
     archive_id: str | None = None
     created_at: datetime
     updated_at: datetime

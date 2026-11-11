@@ -6,7 +6,7 @@
   <title>Application pipeline · AI CV Advisory Board</title>
   <meta name="description" content="Track every application, next action, and the exact CV version you sent.">
   <link rel="stylesheet" href="/static/app.css?v=13">
-  <link rel="stylesheet" href="/static/tracker.css?v=12">
+  <link rel="stylesheet" href="/static/tracker.css?v=13">
   {% if auth_mode == "google" %}<script src="https://accounts.google.com/gsi/client" async defer></script>{% endif %}
 </head>
 <body class="tracker-page">
@@ -31,6 +31,7 @@
     <nav aria-label="Primary navigation">
       <a class="active" href="/dashboard">Dashboard</a>
       <a href="/review">Guided review</a>
+      <a href="/practice">Practice</a>
       <a href="/cvs">CV Library</a>
       <a href="#history" data-open-history>History</a>
       <a href="/admin" data-admin-link hidden>Access</a>
@@ -258,9 +259,9 @@
       <button class="ai-review-button" type="button" hidden>Review attached CV</button>
       <button class="application-review-button ai-review-button" type="button" hidden>Review attached CV</button>
       <p class="ai-summary"></p>
-      <div class="card-footer"><label class="status-control">Move to<select></select></label><span class="card-actions"><a class="text-action card-report-link" hidden>Open report</a><button class="text-action card-answers-button" type="button">Answers</button><button class="text-action card-edit-button" type="button">Edit</button><button class="text-action card-remove-button" type="button">Remove</button></span></div>
+      <div class="card-footer"><label class="status-control">Move to<select></select></label><span class="card-actions"><a class="text-action card-report-link" hidden>Open report</a><button class="text-action card-answers-button" type="button">Answers</button><a class="text-action card-practice-link">Practice</a><button class="text-action card-edit-button" type="button">Edit</button><button class="text-action card-remove-button" type="button">Remove</button></span></div>
     </article>
   </template>
-  <script src="/static/tracker.js?v=12" defer></script>
+  <script src="/static/tracker.js?v=13" defer></script>
 </body>
 </html>

@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Interview practice | AI CV Advisory Board</title>
+  <meta name="description" content="Practise interview questions for each application with flip cards and difficulty levels.">
+  <link rel="stylesheet" href="/static/app.css?v=13"><link rel="stylesheet" href="/static/tracker.css?v=13"><link rel="stylesheet" href="/static/practice.css?v=1">
+  {% if auth_mode == "google" %}<script src="https://accounts.google.com/gsi/client" async defer></script>{% endif %}
+</head>
+<body class="tracker-page practice-page">
+  {% if auth_mode == "google" %}
+  <section class="auth-gate" data-auth-gate data-client-id="{{ google_oauth_client_id }}"><div class="auth-panel"><a class="auth-back" href="/">&larr; Choose another mode</a><div class="auth-brand"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span><span class="overline">Private workspace</span></div><h1>Practise for your interviews.</h1><p>Sign in with an approved Google account to practise questions for your applications.</p><div class="auth-signin" data-google-signin></div><div class="access-state" data-access-state hidden><strong data-access-title></strong><p data-access-copy></p><button class="button button-primary" type="button" data-request-access>Request access</button></div><small data-auth-error role="alert"></small></div></section>
+  {% endif %}
+  <header class="tracker-header workspace-header-nav">
+    <a class="brand" href="/dashboard"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span><span class="brand-copy"><strong>AI CV</strong><small>Career workspace</small></span></a>
+    <nav aria-label="Workspace navigation"><a href="/dashboard">Dashboard</a><a href="/review">Guided review</a><a class="active" href="/practice">Practice</a><a href="/cvs">CV Library</a><a href="/admin" data-admin-link hidden>Access</a></nav>
+    <a class="button button-secondary button-small" href="/dashboard">Back to dashboard</a>
+  </header>
+
+  <main class="practice-shell">
+    <section class="practice-intro">
+      <div><span class="overline">Interview practice</span><h1>Practise until it's easy.</h1><p>Answer out loud, flip the card, and rate yourself. Cards you find hard come back sooner; mastered ones wait longer. Move up a level when you're ready.</p></div>
+      <label class="practice-application">Application <select data-practice-application data-testid="practice-application"><option value="">Choose an application</option></select></label>
+    </section>
+    <p class="workspace-loading" data-loading-workspace>Loading your workspace&hellip;</p>
+    <p class="form-error" data-practice-error role="alert"></p>
+
+    <section class="practice-body" data-practice-body hidden>
+      <div class="level-strip" data-level-strip></div>
+
+      <div class="deck-controls">
+        <div class="deck-summary" data-deck-summary></div>
+        <div class="deck-actions">
+          <label>Level <select data-generate-level data-testid="generate-level"><option value="1">1 · Warm-up</option><option value="2">2 · Role-specific</option><option value="3">3 · Tough</option></select></label>
+          <button class="button button-primary button-small" type="button" data-generate data-testid="generate-cards">Add 5 cards</button>
+        </div>
+      </div>
+      <p class="practice-notice" data-practice-notice hidden></p>
+
+      <div class="practice-filter" role="group" aria-label="Which cards to practise">
+        <button type="button" data-filter="due" class="active">Due now</button>
+        <button type="button" data-filter="all">All cards</button>
+        <button type="button" data-filter="1">Level 1</button>
+        <button type="button" data-filter="2">Level 2</button>
+        <button type="button" data-filter="3">Level 3</button>
+      </div>
+
+      <section class="flashcard" data-flashcard hidden aria-live="polite">
+        <div class="flashcard-top"><span class="level-chip" data-card-level></span><span class="card-progress" data-card-progress></span></div>
+        <h2 class="flashcard-question" data-card-question data-testid="card-question"></h2>
+        <p class="flashcard-hint" data-card-hint>Answer out loud or jot it down, then flip.</p>
+        <label class="answer-field">Your answer <span class="optional-label">optional, saved with the card</span><textarea rows="4" maxlength="3000" data-card-answer placeholder="Key points of your answer…"></textarea></label>
+        <button class="button button-secondary flip-button" type="button" data-flip data-testid="flip-card">Show key points <kbd>Space</kbd></button>
+        <div class="flashcard-back" data-card-back hidden>
+          <h3>A strong answer covers</h3>
+          <ul data-card-points></ul>
+          <div class="rating-row" role="group" aria-label="How did it go?">
+            <button type="button" data-rate="again"><strong>Again</strong><small>1 · forgot</small></button>
+            <button type="button" data-rate="hard"><strong>Hard</strong><small>2 · shaky</small></button>
+            <button type="button" data-rate="good" data-testid="rate-good"><strong>Good</strong><small>3 · solid</small></button>
+            <button type="button" data-rate="easy"><strong>Easy</strong><small>4 · effortless</small></button>
+          </div>
+          <div class="card-tools"><button class="text-action as-button" type="button" data-save-answer>Save my answer to the application's Answers</button><button class="text-action as-button danger-text" type="button" data-delete-card>Delete card</button></div>
+        </div>
+      </section>
+
+      <section class="practice-empty" data-practice-empty hidden>
+        <h2 data-empty-title>No cards yet.</h2>
+        <p data-empty-copy>Pick a level and add cards. Start with Warm-up and move up as cards become easy.</p>
+      </section>
+    </section>
+  </main>
+  <nav class="mobile-workspace-nav" aria-label="Mobile workspace navigation"><a href="/dashboard">Dashboard</a><a href="/review">Review</a><a class="active" href="/practice">Practice</a></nav>
+  <script src="/static/practice.js?v=1" defer></script>
+</body>
+</html>
